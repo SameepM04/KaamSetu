@@ -47,8 +47,9 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
   @override
   void initState() {
     super.initState();
-    // Default selection matches the approved design (male avatar pre-checked).
-    _selectedAvatar = ProfilePhotoAvatar.male;
+    // Default selection: the premium Family avatar (matches the Household
+    // "Choose Your Profile" design — family is pre-checked).
+    _selectedAvatar = ProfilePhotoAvatar.familyHousehold;
     _nameController.addListener(() => setState(() {}));
     _phoneController.addListener(() => setState(() {}));
   }
@@ -350,7 +351,7 @@ class _FormCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Center(
-            child: Text('Add Profile',
+            child: Text('Choose Your Profile',
                 style: TextStyle(
                     color: AppColors.navy,
                     fontSize: 18,
@@ -358,45 +359,95 @@ class _FormCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Center(
-            child: Text('Choose an avatar or upload a photo',
+            child: Text('Pick a premium avatar or upload your own photo',
                 style: TextStyle(color: AppColors.inkMuted, fontSize: 13)),
           ),
           const SizedBox(height: 18),
           ScaleTransition(
             scale: Tween(begin: .94, end: 1.0).animate(
                 CurvedAnimation(parent: photoAnim, curve: Curves.easeOutBack)),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: _DashedTile(
-                    icon: Icons.image_outlined,
-                    label: 'Select from\nGallery',
-                    onTap: onTapGallery,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PremiumAvatarCard(
+                        assetPath:
+                            'assets/images/household/male_household.png',
+                        heroTag: 'household-avatar-male',
+                        label: 'Male',
+                        selected:
+                            selectedAvatar == ProfilePhotoAvatar.maleHousehold,
+                        onTap: () =>
+                            onSelectAvatar(ProfilePhotoAvatar.maleHousehold),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _PremiumAvatarCard(
+                        assetPath:
+                            'assets/images/household/female_household.png',
+                        heroTag: 'household-avatar-female',
+                        label: 'Female',
+                        selected: selectedAvatar ==
+                            ProfilePhotoAvatar.femaleHousehold,
+                        onTap: () =>
+                            onSelectAvatar(ProfilePhotoAvatar.femaleHousehold),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _DashedTile(
-                    icon: Icons.camera_alt_outlined,
-                    label: 'Take\nPhoto',
-                    onTap: onTapCamera,
-                  ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(flex: 1, child: const SizedBox()),
+                    Expanded(
+                      flex: 2,
+                      child: _PremiumAvatarCard(
+                        assetPath: 'assets/images/household/family_avatar.png',
+                        heroTag: 'household-avatar-family',
+                        label: 'Family',
+                        selected: selectedAvatar ==
+                            ProfilePhotoAvatar.familyHousehold,
+                        onTap: () =>
+                            onSelectAvatar(ProfilePhotoAvatar.familyHousehold),
+                      ),
+                    ),
+                    Expanded(flex: 1, child: const SizedBox()),
+                  ],
                 ),
-                const _OrPill(),
-                Expanded(
-                  child: _AvatarTile(
-                    assetPath: 'assets/avatars/male_avatar.png',
-                    selected: selectedAvatar == ProfilePhotoAvatar.male,
-                    onTap: () => onSelectAvatar(ProfilePhotoAvatar.male),
+                const SizedBox(height: 16),
+                Row(children: const [
+                  Expanded(child: Divider(color: AppColors.line)),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Text('OR',
+                        style: TextStyle(
+                            color: AppColors.inkMuted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _AvatarTile(
-                    assetPath: 'assets/avatars/female_avatar.png',
-                    selected: selectedAvatar == ProfilePhotoAvatar.female,
-                    onTap: () => onSelectAvatar(ProfilePhotoAvatar.female),
-                  ),
+                  Expanded(child: Divider(color: AppColors.line)),
+                ]),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DashedTile(
+                        icon: Icons.image_outlined,
+                        label: 'Select from\nGallery',
+                        onTap: onTapGallery,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _DashedTile(
+                        icon: Icons.camera_alt_outlined,
+                        label: 'Take\nPhoto',
+                        onTap: onTapCamera,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -533,76 +584,127 @@ class _DashedBorderPainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
-class _OrPill extends StatelessWidget {
-  const _OrPill();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 1, height: 26, color: AppColors.line),
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-                color: AppColors.mist, borderRadius: BorderRadius.circular(10)),
-            child: const Text('OR',
-                style: TextStyle(
-                    color: AppColors.inkMuted,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700)),
-          ),
-          Container(width: 1, height: 26, color: AppColors.line),
-        ],
-      ),
-    );
-  }
-}
-
-class _AvatarTile extends StatelessWidget {
-  const _AvatarTile(
-      {required this.assetPath, required this.selected, required this.onTap});
+/// Premium, tappable avatar card used only by the Household "Choose Your
+/// Profile" picker (male / female / family). Material 3 styling with a
+/// scale-on-tap animation, ripple feedback, soft shadow, blue selection
+/// border + checkmark badge, and a Hero tag so the same image can transition
+/// into a profile screen if one is pushed from here.
+class _PremiumAvatarCard extends StatefulWidget {
+  const _PremiumAvatarCard({
+    required this.assetPath,
+    required this.heroTag,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String assetPath;
+  final String heroTag;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
 
   @override
+  State<_PremiumAvatarCard> createState() => _PremiumAvatarCardState();
+}
+
+class _PremiumAvatarCardState extends State<_PremiumAvatarCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _scale = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+      value: 1,
+      lowerBound: .92,
+      upperBound: 1);
+
+  @override
+  void dispose() {
+    _scale.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AnimatedContainer(
+      onTapDown: (_) => _scale.animateTo(.92),
+      onTapUp: (_) => _scale.animateTo(1),
+      onTapCancel: () => _scale.animateTo(1),
+      child: ScaleTransition(
+        scale: _scale,
+        child: Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          elevation: widget.selected ? 6 : 3,
+          shadowColor: const Color(0x334775F0),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: widget.onTap,
+            child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                    color: selected ? AppColors.blue : AppColors.line,
-                    width: selected ? 2 : 1.4),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Image.asset(assetPath, fit: BoxFit.cover),
-            ),
-            if (selected)
-              Positioned(
-                top: -6,
-                right: -6,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                      color: AppColors.blue, shape: BoxShape.circle),
-                  child: const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 12),
+                  color: widget.selected ? AppColors.blue : AppColors.line,
+                  width: widget.selected ? 2.4 : 1.2,
                 ),
               ),
-          ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Hero(
+                            tag: widget.heroTag,
+                            child: Image.asset(widget.assetPath,
+                                fit: BoxFit.cover),
+                          ),
+                        ),
+                        AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: widget.selected ? 1 : 0,
+                          child: Positioned(
+                            top: -6,
+                            right: -6,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: AppColors.blue,
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: Colors.white, width: 2),
+                                boxShadow: const [
+                                  BoxShadow(
+                                      color: Color(0x554775F0),
+                                      blurRadius: 6,
+                                      offset: Offset(0, 2)),
+                                ],
+                              ),
+                              child: const Icon(Icons.check_rounded,
+                                  color: Colors.white, size: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(widget.label,
+                      style: TextStyle(
+                          color: widget.selected
+                              ? AppColors.blue
+                              : AppColors.navy,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

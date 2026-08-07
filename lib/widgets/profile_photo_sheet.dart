@@ -5,7 +5,15 @@ import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
 
-enum ProfilePhotoAvatar { male, female }
+enum ProfilePhotoAvatar {
+  male,
+  female,
+  // Premium Household avatars — used only by HouseholdSignUpScreen's own
+  // avatar picker. Additive values; the Worker flow above is untouched.
+  maleHousehold,
+  femaleHousehold,
+  familyHousehold,
+}
 
 /// Result of the profile-photo bottom sheet: either a preset avatar or a
 /// picked image file. Both null means the user cancelled / kept default.
