@@ -538,18 +538,20 @@ class _CategoryRow extends StatelessWidget {
         clipBehavior: Clip.none,
         itemCount: JobCategoryMapper.all.length,
         separatorBuilder: (_, __) => const SizedBox(width: 16),
-        itemBuilder: (context, i) =>
-            _CategoryCard(category: JobCategoryMapper.all[i], onTap: onTap),
+        itemBuilder: (context, i) => _CategoryCard(
+            category: JobCategoryMapper.all[i], index: i, onTap: onTap),
       ),
     );
   }
 }
 
 class _CategoryCard extends StatefulWidget {
-  const _CategoryCard({required this.category, required this.onTap});
+  const _CategoryCard(
+      {required this.category, required this.onTap, this.index = 0});
 
   final JobCategory category;
   final ValueChanged<JobCategory> onTap;
+  final int index;
 
   @override
   State<_CategoryCard> createState() => _CategoryCardState();
@@ -563,6 +565,7 @@ class _CategoryCardState extends State<_CategoryCard>
       value: 1,
       lowerBound: .9,
       upperBound: 1);
+  bool _hovered = false;
 
   @override
   void dispose() {
@@ -572,31 +575,57 @@ class _CategoryCardState extends State<_CategoryCard>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _scale.animateTo(.9),
-      onTapUp: (_) => _scale.animateTo(1),
-      onTapCancel: () => _scale.animateTo(1),
-      onTap: () => widget.onTap(widget.category),
-      child: ScaleTransition(
-        scale: _scale,
-        child: SizedBox(
-          width: 70,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              JobCategoryIcon(category: widget.category),
-              const SizedBox(height: 7),
-              Text(
-                JobCategoryMapper.displayName(widget.category),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700),
+    final delay = Duration(milliseconds: 60 * widget.index);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 340) + delay,
+      curve: Curves.easeOutCubic,
+      builder: (context, v, child) {
+        final delayFraction = delay.inMilliseconds /
+            (340 + delay.inMilliseconds);
+        final progress = ((v - delayFraction) / (1 - delayFraction))
+            .clamp(0.0, 1.0);
+        return Opacity(
+          opacity: progress,
+          child: Transform.translate(
+              offset: Offset(0, (1 - progress) * 14), child: child),
+        );
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTapDown: (_) => _scale.animateTo(.9),
+          onTapUp: (_) => _scale.animateTo(1),
+          onTapCancel: () => _scale.animateTo(1),
+          onTap: () => widget.onTap(widget.category),
+          child: AnimatedScale(
+            scale: _hovered ? 1.03 : 1.0,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            child: ScaleTransition(
+              scale: _scale,
+              child: SizedBox(
+                width: 70,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    JobCategoryIcon(category: widget.category),
+                    const SizedBox(height: 7),
+                    Text(
+                      JobCategoryMapper.displayName(widget.category),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),
