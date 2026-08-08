@@ -136,7 +136,25 @@ class FakeAuthService implements AuthService {
     }
     // Note: newPhotoFile is ignored in fake mode (no Storage available).
 
+    // Save in-memory for the current session.
     LocalWorkerSession.save(fields);
+
+    // Also persist ALL fields to SharedPreferences so edits survive an app restart.
+    await SessionService.saveSession(
+      uid: LocalWorkerSession.userId,
+      fullName: fullName,
+      phoneNumber: LocalWorkerSession.data['phoneNumber'] as String? ?? '',
+      avatar: selectedAvatar ?? LocalWorkerSession.data['selectedAvatar'] as String?,
+      role: LocalWorkerSession.data['role'] as String? ?? 'worker',
+      address: address,
+      skills: skills,
+      experience: experience,
+      preferredCategories: preferredCategories,
+      availability: availability,
+      workingRadius: workingRadius,
+      expectedDailyWage: expectedDailyWage,
+      languages: languages,
+    );
   }
 
   @override

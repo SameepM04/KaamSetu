@@ -22,9 +22,14 @@ import 'settings/settings_screen.dart';
 /// All editing of Basic + Professional information lives inside
 /// [EditProfileScreen]. There are no standalone section cards pointing to
 /// separate edit screens.
-class WorkerProfileScreen extends StatelessWidget {
+class WorkerProfileScreen extends StatefulWidget {
   const WorkerProfileScreen({super.key});
 
+  @override
+  State<WorkerProfileScreen> createState() => _WorkerProfileScreenState();
+}
+
+class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
   static final _workerService = WorkerAuthService();
 
   @override
@@ -36,6 +41,7 @@ class WorkerProfileScreen extends StatelessWidget {
         data: LocalWorkerSession.data,
         loading: false,
         hasError: false,
+        onEditComplete: () => setState(() {}),
       );
     }
 
@@ -50,6 +56,7 @@ class WorkerProfileScreen extends StatelessWidget {
           data: data,
           loading: loading,
           hasError: hasError,
+          onEditComplete: null,
         );
       },
     );
@@ -61,11 +68,13 @@ class _WorkerProfileBody extends StatefulWidget {
     required this.data,
     required this.loading,
     required this.hasError,
+    this.onEditComplete,
   });
 
   final Map<String, dynamic> data;
   final bool loading;
   final bool hasError;
+  final VoidCallback? onEditComplete;
 
   @override
   State<_WorkerProfileBody> createState() => _WorkerProfileBodyState();
@@ -115,7 +124,7 @@ class _WorkerProfileBodyState extends State<_WorkerProfileBody> {
         bottom: false,
         child: widget.loading
             ? const _ProfileSkeleton()
-            : _ProfileContent(data: widget.data),
+            : _ProfileContent(data: widget.data, onEditComplete: widget.onEditComplete),
       ),
     );
   }
@@ -126,8 +135,9 @@ class _WorkerProfileBodyState extends State<_WorkerProfileBody> {
 // ---------------------------------------------------------------------------
 
 class _ProfileContent extends StatelessWidget {
-  const _ProfileContent({required this.data});
+  const _ProfileContent({required this.data, this.onEditComplete});
   final Map<String, dynamic> data;
+  final VoidCallback? onEditComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +154,7 @@ class _ProfileContent extends StatelessWidget {
               children: [
                 _ProfileTopBar(),
                 const SizedBox(height: 18),
-                _ProfileHeaderCard(data: data, completion: completion),
+                _ProfileHeaderCard(data: data, completion: completion, onEditComplete: onEditComplete),
                 const SizedBox(height: 22),
               ],
             ),
@@ -190,10 +200,11 @@ class _ProfileTopBar extends StatelessWidget {
 
 class _ProfileHeaderCard extends StatelessWidget {
   const _ProfileHeaderCard(
-      {required this.data, required this.completion});
+      {required this.data, required this.completion, this.onEditComplete});
 
   final Map<String, dynamic> data;
   final double completion;
+  final VoidCallback? onEditComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -293,40 +304,42 @@ class _ProfileHeaderCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: () =>
-                  Navigator.of(context).push(premiumPageRoute(
-                EditProfileScreen(
-                  initialFullName: name == 'Worker' ? '' : name,
-                  initialAddress: address ?? '',
-                  initialPhoneNumber: phone ?? '',
-                  initialSelectedAvatar: selectedAvatar,
-                  initialProfilePhotoURL: profilePhotoURL,
-                  initialSkills: (data['skills'] as List?)
-                          ?.cast<String>() ??
-                      const [],
-                  initialExperience:
-                      data['experienceYears'] as String?,
-                  initialCategories:
-                      (data['preferredCategories'] as List?)
-                              ?.cast<String>() ??
-                          const [],
-                  initialAvailability:
-                      (data['availability'] as List?)
-                              ?.cast<String>() ??
-                          const [],
-                  initialWorkingRadius:
-                      ((data['workingRadiusKm'] as num?)
-                                  ?.toDouble() ??
-                              5)
-                          .clamp(5.0, 50.0),
-                  initialDailyWage:
-                      (data['expectedDailyWage'] as num?)?.toInt(),
-                  initialLanguages:
-                      (data['languagesKnown'] as List?)
-                              ?.cast<String>() ??
-                          const [],
-                ),
-              )),
+              onPressed: () async {
+                await Navigator.of(context).push(premiumPageRoute(
+                  EditProfileScreen(
+                    initialFullName: name == 'Worker' ? '' : name,
+                    initialAddress: address ?? '',
+                    initialPhoneNumber: phone ?? '',
+                    initialSelectedAvatar: selectedAvatar,
+                    initialProfilePhotoURL: profilePhotoURL,
+                    initialSkills: (data['skills'] as List?)
+                            ?.cast<String>() ??
+                        const [],
+                    initialExperience:
+                        data['experienceYears'] as String?,
+                    initialCategories:
+                        (data['preferredCategories'] as List?)
+                                ?.cast<String>() ??
+                            const [],
+                    initialAvailability:
+                        (data['availability'] as List?)
+                                ?.cast<String>() ??
+                            const [],
+                    initialWorkingRadius:
+                        ((data['workingRadiusKm'] as num?)
+                                    ?.toDouble() ??
+                                5)
+                            .clamp(5.0, 50.0),
+                    initialDailyWage:
+                        (data['expectedDailyWage'] as num?)?.toInt(),
+                    initialLanguages:
+                        (data['languagesKnown'] as List?)
+                                ?.cast<String>() ??
+                            const [],
+                  ),
+                ));
+                onEditComplete?.call();
+              },
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.blue,
                 foregroundColor: Colors.white,
