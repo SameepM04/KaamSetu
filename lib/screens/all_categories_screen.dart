@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/job_categories.dart';
 import '../theme/app_colors.dart';
+import '../widgets/home/animated_category_card.dart';
 import '../widgets/home/category_icon.dart';
 
 /// "All Categories" — reached from Home's "Browse by Skill → See all".
@@ -47,6 +48,7 @@ class AllCategoriesScreen extends StatelessWidget {
             final category = JobCategoryMapper.all[i];
             return _AllCategoriesCard(
                 category: category,
+                index: i,
                 onTap: () {
                   onSelectCategory(category);
                   Navigator.of(context).pop();
@@ -58,62 +60,40 @@ class AllCategoriesScreen extends StatelessWidget {
   }
 }
 
-class _AllCategoriesCard extends StatefulWidget {
-  const _AllCategoriesCard({required this.category, required this.onTap});
+class _AllCategoriesCard extends StatelessWidget {
+  const _AllCategoriesCard(
+      {required this.category, required this.onTap, this.index = 0});
   final JobCategory category;
   final VoidCallback onTap;
-
-  @override
-  State<_AllCategoriesCard> createState() => _AllCategoriesCardState();
-}
-
-class _AllCategoriesCardState extends State<_AllCategoriesCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _scale = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 110),
-      value: 1,
-      lowerBound: .95,
-      upperBound: 1);
-
-  @override
-  void dispose() {
-    _scale.dispose();
-    super.dispose();
-  }
+  final int index;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _scale.animateTo(.95),
-      onTapUp: (_) => _scale.animateTo(1),
-      onTapCancel: () => _scale.animateTo(1),
-      onTap: widget.onTap,
-      child: ScaleTransition(
-        scale: _scale,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.line.withValues(alpha: .6)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              JobCategoryIcon(category: widget.category),
-              const SizedBox(height: 10),
-              Text(
-                JobCategoryMapper.displayName(widget.category),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
+    return AnimatedCategoryCard(
+      index: index,
+      onTap: onTap,
+      borderRadius: 20,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.line.withValues(alpha: .6)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            JobCategoryIcon(category: category),
+            const SizedBox(height: 10),
+            Text(
+              JobCategoryMapper.displayName(category),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
       ),
     );
