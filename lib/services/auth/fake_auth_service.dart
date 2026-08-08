@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../config/dev_config.dart';
@@ -29,6 +31,11 @@ import 'auth_service.dart';
 ///         [LocalWorkerSession] whenever there's no signed-in Firebase
 ///         user — keep working completely unchanged.
 class FakeAuthService implements AuthService {
+  FakeAuthService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
+
   static const String _fakeVerificationId = 'fake-otp-verification-id';
 
   @override
@@ -73,7 +80,17 @@ class FakeAuthService implements AuthService {
       );
     }
 
-    const uid = 'fake-worker-kaamsetu';
+    // Role-scoped fake uid + collection — mirrors FirebaseAuthService's
+    // `role == 'household' ? 'households' : 'workers'` split. Previously
+    // this was a single hardcoded 'fake-worker-kaamsetu' id shared by both
+    // roles, so a household sign-up and a worker sign-up would collide in
+    // [LocalWorkerSession]/[SessionService], and — because nothing was ever
+    // written to Firestore here — HouseholdRepository.profileStream()
+    // always found an empty `households/{uid}` doc and fell back to the
+    // demo household, no matter what name was actually entered at sign up.
+    final uid =
+        role == 'household' ? 'fake-household-kaamsetu' : 'fake-worker-kaamsetu';
+    final collection = role == 'household' ? 'households' : 'workers';
     final profile = <String, dynamic>{
       'uid': uid,
       'fullName': fullName,
@@ -83,7 +100,8 @@ class FakeAuthService implements AuthService {
       'profileCompleted': false,
     };
 
-    // Persist for the current run (Home/Profile read this).
+    // Persist for the current run (Home/Profile read this immediately —
+    // don't wait on Firestore below, so sign-in is never blocked by it).
     LocalWorkerSession.save(profile);
 
     // Persist across app restarts (Splash reads this to skip Login).
@@ -93,6 +111,27 @@ class FakeAuthService implements AuthService {
       phoneNumber: phoneNumber,
       avatar: selectedAvatar?.name,
       role: role,
+    );
+
+    // Best-effort mirror to Firestore so HouseholdRepository.profileStream()
+    // / WorkerAuthService.workerProfileStream() find a real document instead
+    // of falling back to demo data. Deliberately NOT awaited and wrapped in
+    // its own timeout + catch: Fake OTP mode exists specifically to work
+    // fully offline (see class doc — Spark plan has no billing, and network
+    // conditions during dev are unreliable), so sign-in must never hang or
+    // fail just because this write is slow, blocked by security rules, or
+    // unreachable. LocalWorkerSession/SessionService above are the source
+    // of truth the UI can always rely on; this is a nice-to-have on top.
+    unawaited(
+      _firestore.collection(collection).doc(uid).set({
+        ...profile,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 8)).catchError(
+        (Object error, StackTrace _) {
+          // ignore: avoid_print
+          print('FakeAuthService: Firestore mirror write skipped — $error');
+        },
+      ),
     );
 
     // No real FirebaseAuth `User` exists in the Fake OTP flow; a `null`

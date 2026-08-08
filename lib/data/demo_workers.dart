@@ -1,5 +1,17 @@
 import '../repositories/household_repository.dart';
 
+/// Demo household profile used when a signed-in household has no Firestore
+/// document yet (fresh MVP install / local dev session). Mirrors the shape
+/// of a real `HouseholdProfile` so the Home greeting, header and avatar
+/// render identically whether the data came from Firestore or from here —
+/// the UI never needs to know which source it got.
+const kDemoHouseholdProfile = HouseholdProfile(
+  id: 'demo_household',
+  name: 'Rahul Sharma',
+  avatar: 'maleHousehold',
+  address: 'Kothrud, Pune',
+);
+
 /// 12 realistic demo worker profiles used when Firestore's `workers`
 /// collection is empty.  Each entry mirrors the shape of a real
 /// `WorkerProfile` so every widget renders identically whether the data

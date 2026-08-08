@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 
-/// Renders a worker's profile photo exactly the way it was chosen during
-/// sign up (see `ProfilePhotoAvatar` + `profile_photo_sheet.dart`):
-/// male/female preset avatar, an uploaded gallery/camera image (stored in
+/// Renders a worker's or household's profile photo exactly the way it was
+/// chosen during sign up (see `ProfilePhotoAvatar` + `profile_photo_sheet
+/// .dart`): a preset avatar, an uploaded gallery/camera image (stored in
 /// Firebase Storage as `profilePhotoURL`), or — if nothing was ever
 /// selected — a neutral fallback so the layout never breaks.
+///
+/// `selectedAvatar` accepts both the Worker preset keys (`'male'` /
+/// `'female'`, from `ProfilePhotoAvatar.male` / `.female`) and the
+/// Household preset keys (`'maleHousehold'` / `'femaleHousehold'` /
+/// `'familyHousehold'`, from the enum values `HouseholdSignUpScreen`'s own
+/// avatar picker offers) — mirroring `ProfilePhotoAvatar.name` exactly, so
+/// whatever gets written to Firestore's `selectedAvatar` field always
+/// renders as the actual image the person picked, not a Worker fallback.
 class WorkerProfileAvatar extends StatelessWidget {
   const WorkerProfileAvatar({
     super.key,
@@ -15,7 +23,8 @@ class WorkerProfileAvatar extends StatelessWidget {
     this.size = 46,
   });
 
-  /// `'male'` / `'female'` (mirrors `ProfilePhotoAvatar.name`), or null.
+  /// Mirrors `ProfilePhotoAvatar.name` — `'male'`, `'female'`,
+  /// `'maleHousehold'`, `'femaleHousehold'`, `'familyHousehold'` — or null.
   final String? selectedAvatar;
 
   /// Uploaded photo URL from Firebase Storage, or null.
@@ -23,17 +32,23 @@ class WorkerProfileAvatar extends StatelessWidget {
 
   final double size;
 
+  static const _assetByKey = <String, String>{
+    'male': 'assets/avatars/male_avatar.png',
+    'female': 'assets/avatars/female_avatar.png',
+    'maleHousehold': 'assets/images/household/male_household.png',
+    'femaleHousehold': 'assets/images/household/female_household.png',
+    'familyHousehold': 'assets/images/household/family_avatar.png',
+  };
+
   @override
   Widget build(BuildContext context) {
     Widget image;
+    final assetPath = _assetByKey[selectedAvatar];
     if (profilePhotoURL != null && profilePhotoURL!.isNotEmpty) {
       image = Image.network(profilePhotoURL!,
           fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallbackIcon());
-    } else if (selectedAvatar == 'male') {
-      image = Image.asset('assets/avatars/male_avatar.png', fit: BoxFit.cover);
-    } else if (selectedAvatar == 'female') {
-      image =
-          Image.asset('assets/avatars/female_avatar.png', fit: BoxFit.cover);
+    } else if (assetPath != null) {
+      image = Image.asset(assetPath, fit: BoxFit.cover);
     } else {
       image = _fallbackIcon();
     }

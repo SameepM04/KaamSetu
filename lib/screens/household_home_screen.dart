@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../data/demo_workers.dart';
 import '../data/job_categories.dart';
 import '../data/job_filters.dart';
 import '../repositories/household_repository.dart';
@@ -339,7 +340,8 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
   }
 
   Future<void> _openFilters() async {
-    final result = await showJobFilterSheet(context, _filters);
+    final result =
+        await showJobFilterSheet(context, _filters, forWorkers: true);
     if (result != null && mounted) {
       setState(() {
         _filters = result;
@@ -396,6 +398,15 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
       if (_filters.nearbyOnly && worker.distance > 3) return false;
       // Verified only
       if (_filters.verifiedOnly && !worker.verified) return false;
+      // Availability — worker must offer at least one selected slot
+      if (_filters.availability.isNotEmpty &&
+          !worker.availability.any((a) => _filters.availability.contains(a))) {
+        return false;
+      }
+      // Minimum rating
+      if (_filters.minRating > 0 && worker.rating < _filters.minRating) {
+        return false;
+      }
       return true;
     }).toList();
   }
@@ -423,7 +434,8 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
                           _DashboardHeader(profile: profile.data),
                           const SizedBox(height: 22),
                           _HouseholdGreetingBlock(
-                            firstName: profile.data?.firstName ?? 'Guest',
+                            firstName: profile.data?.firstName ??
+                                kDemoHouseholdProfile.firstName,
                           ),
                           const SizedBox(height: 16),
                           Row(
@@ -645,7 +657,7 @@ class _DashboardHeader extends StatelessWidget {
           _HouseholdNotificationBell(onTap: () {}),
           const SizedBox(width: 12),
           WorkerProfileAvatar(
-            selectedAvatar: profile?.avatar,
+            selectedAvatar: profile?.avatar ?? kDemoHouseholdProfile.avatar,
             profilePhotoURL: profile?.photoUrl,
             size: 46,
           ),

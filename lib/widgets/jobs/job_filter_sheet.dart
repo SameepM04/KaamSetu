@@ -5,23 +5,35 @@ import '../../data/job_filters.dart';
 import '../../data/job_previews.dart';
 import '../../theme/app_colors.dart';
 
-/// Opens the Jobs filter bottom sheet and resolves with the filters the user
+/// Opens the filter bottom sheet and resolves with the filters the user
 /// applied, or `null` if they dismissed it without applying.
+///
+/// [forWorkers] switches the sheet's lower section from the Jobs-search
+/// filters (Experience / Job Type / Today's Jobs / Verified Employers) to
+/// the Household worker-search filters (Availability / Minimum Rating) —
+/// Category, [Daily Wage / Salary] Range and Distance are shared as-is by
+/// both, since they mean the same thing for a job post and a worker. The
+/// sheet, its styling and its Category/Salary/Distance controls are the
+/// same component either way — nothing is duplicated.
 Future<JobFilters?> showJobFilterSheet(
-    BuildContext context, JobFilters current) {
+  BuildContext context,
+  JobFilters current, {
+  bool forWorkers = false,
+}) {
   return showModalBottomSheet<JobFilters>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-    builder: (_) => _JobFilterSheet(initial: current),
+    builder: (_) => _JobFilterSheet(initial: current, forWorkers: forWorkers),
   );
 }
 
 class _JobFilterSheet extends StatefulWidget {
-  const _JobFilterSheet({required this.initial});
+  const _JobFilterSheet({required this.initial, required this.forWorkers});
   final JobFilters initial;
+  final bool forWorkers;
 
   @override
   State<_JobFilterSheet> createState() => _JobFilterSheetState();
@@ -40,6 +52,8 @@ class _JobFilterSheetState extends State<_JobFilterSheet> {
   late bool _todayOnly = widget.initial.todayOnly;
   late bool _nearbyOnly = widget.initial.nearbyOnly;
   late bool _verifiedOnly = widget.initial.verifiedOnly;
+  late Set<String> _availability = {...widget.initial.availability};
+  late double _minRating = widget.initial.minRating;
 
   void _reset() {
     setState(() {
@@ -52,6 +66,8 @@ class _JobFilterSheetState extends State<_JobFilterSheet> {
       _todayOnly = false;
       _nearbyOnly = false;
       _verifiedOnly = false;
+      _availability = {};
+      _minRating = 0;
     });
   }
 
@@ -65,6 +81,8 @@ class _JobFilterSheetState extends State<_JobFilterSheet> {
       todayOnly: _todayOnly,
       nearbyOnly: _nearbyOnly,
       verifiedOnly: _verifiedOnly,
+      availability: _availability,
+      minRating: _minRating,
     ));
   }
 
@@ -95,7 +113,8 @@ class _JobFilterSheetState extends State<_JobFilterSheet> {
                       onChanged: (value) => setState(() => _category = value),
                     ),
                     const SizedBox(height: 22),
-                    const _SectionLabel('Salary Range'),
+                    _SectionLabel(
+                        widget.forWorkers ? 'Daily Wage' : 'Salary Range'),
                     _SalaryRangeControl(
                       values: _salaryRange,
                       onChanged: (value) =>
@@ -109,40 +128,61 @@ class _JobFilterSheetState extends State<_JobFilterSheet> {
                           setState(() => _maxDistance = value),
                     ),
                     const SizedBox(height: 22),
-                    const _SectionLabel('Experience'),
-                    _MultiChoiceChips<ExperienceLevel>(
-                      options: ExperienceLevelMapper.all,
-                      labelOf: ExperienceLevelMapper.displayName,
-                      selected: _experienceLevels,
-                      onChanged: (value) =>
-                          setState(() => _experienceLevels = value),
-                    ),
-                    const SizedBox(height: 22),
-                    const _SectionLabel('Job Type'),
-                    _MultiChoiceChips<JobType>(
-                      options: JobTypeMapper.all,
-                      labelOf: JobTypeMapper.displayName,
-                      selected: _jobTypes,
-                      onChanged: (value) => setState(() => _jobTypes = value),
-                    ),
-                    const SizedBox(height: 22),
-                    const _SectionLabel('Quick Filters'),
-                    _ToggleRow(
-                      label: "Today's Jobs",
-                      value: _todayOnly,
-                      onChanged: (value) => setState(() => _todayOnly = value),
-                    ),
-                    _ToggleRow(
-                      label: 'Nearby Only',
-                      value: _nearbyOnly,
-                      onChanged: (value) => setState(() => _nearbyOnly = value),
-                    ),
-                    _ToggleRow(
-                      label: 'Verified Employers',
-                      value: _verifiedOnly,
-                      onChanged: (value) =>
-                          setState(() => _verifiedOnly = value),
-                    ),
+                    if (widget.forWorkers) ...[
+                      const _SectionLabel('Availability'),
+                      _MultiChoiceChips<String>(
+                        options: kWorkerAvailabilityOptions,
+                        labelOf: (v) => v,
+                        selected: _availability,
+                        onChanged: (value) =>
+                            setState(() => _availability = value),
+                      ),
+                      const SizedBox(height: 22),
+                      const _SectionLabel('Minimum Rating'),
+                      _RatingControl(
+                        value: _minRating,
+                        onChanged: (value) =>
+                            setState(() => _minRating = value),
+                      ),
+                    ] else ...[
+                      const _SectionLabel('Experience'),
+                      _MultiChoiceChips<ExperienceLevel>(
+                        options: ExperienceLevelMapper.all,
+                        labelOf: ExperienceLevelMapper.displayName,
+                        selected: _experienceLevels,
+                        onChanged: (value) =>
+                            setState(() => _experienceLevels = value),
+                      ),
+                      const SizedBox(height: 22),
+                      const _SectionLabel('Job Type'),
+                      _MultiChoiceChips<JobType>(
+                        options: JobTypeMapper.all,
+                        labelOf: JobTypeMapper.displayName,
+                        selected: _jobTypes,
+                        onChanged: (value) =>
+                            setState(() => _jobTypes = value),
+                      ),
+                      const SizedBox(height: 22),
+                      const _SectionLabel('Quick Filters'),
+                      _ToggleRow(
+                        label: "Today's Jobs",
+                        value: _todayOnly,
+                        onChanged: (value) =>
+                            setState(() => _todayOnly = value),
+                      ),
+                      _ToggleRow(
+                        label: 'Nearby Only',
+                        value: _nearbyOnly,
+                        onChanged: (value) =>
+                            setState(() => _nearbyOnly = value),
+                      ),
+                      _ToggleRow(
+                        label: 'Verified Employers',
+                        value: _verifiedOnly,
+                        onChanged: (value) =>
+                            setState(() => _verifiedOnly = value),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -336,6 +376,41 @@ class _DistanceControl extends StatelessWidget {
       ],
     );
   }
+}
+
+class _RatingControl extends StatelessWidget {
+  const _RatingControl({required this.value, required this.onChanged});
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          for (var star = 1; star <= 5; star++)
+            GestureDetector(
+              onTap: () =>
+                  onChanged(value == star.toDouble() ? 0 : star.toDouble()),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(
+                  value >= star
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
+                  color: AppColors.warmGold,
+                  size: 30,
+                ),
+              ),
+            ),
+          const SizedBox(width: 10),
+          Text(
+            value > 0 ? '${value.toInt()}+ stars' : 'Any rating',
+            style: const TextStyle(
+                color: AppColors.inkMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600),
+          ),
+        ],
+      );
 }
 
 class _MultiChoiceChips<T> extends StatelessWidget {

@@ -46,6 +46,8 @@ class JobFilters {
     this.todayOnly = false,
     this.nearbyOnly = false,
     this.verifiedOnly = false,
+    this.availability = const <String>{},
+    this.minRating = 0,
   });
 
   final JobCategory? category;
@@ -56,6 +58,11 @@ class JobFilters {
   final bool todayOnly;
   final bool nearbyOnly;
   final bool verifiedOnly;
+
+  /// Worker-search-only filters (Household "Recommended Workers"). Unused
+  /// — and never set — by the Jobs screen's own use of this same class.
+  final Set<String> availability;
+  final double minRating;
 
   /// True when at least one filter differs from the neutral default —
   /// drives the "active filters" badge on the Jobs screen filter button.
@@ -68,7 +75,9 @@ class JobFilters {
       jobTypes.isNotEmpty ||
       todayOnly ||
       nearbyOnly ||
-      verifiedOnly;
+      verifiedOnly ||
+      availability.isNotEmpty ||
+      minRating > 0;
 
   int get activeCount => [
         category != null,
@@ -80,6 +89,8 @@ class JobFilters {
         todayOnly,
         nearbyOnly,
         verifiedOnly,
+        availability.isNotEmpty,
+        minRating > 0,
       ].where((flag) => flag).length;
 
   JobFilters copyWith({
@@ -92,6 +103,8 @@ class JobFilters {
     bool? todayOnly,
     bool? nearbyOnly,
     bool? verifiedOnly,
+    Set<String>? availability,
+    double? minRating,
   }) {
     return JobFilters(
       category: clearCategory ? null : (category ?? this.category),
@@ -102,9 +115,22 @@ class JobFilters {
       todayOnly: todayOnly ?? this.todayOnly,
       nearbyOnly: nearbyOnly ?? this.nearbyOnly,
       verifiedOnly: verifiedOnly ?? this.verifiedOnly,
+      availability: availability ?? this.availability,
+      minRating: minRating ?? this.minRating,
     );
   }
 }
+
+/// Fixed availability options offered in the Household worker-filter sheet
+/// — mirrors the values `WorkerProfile.availability` is actually populated
+/// with (see `demo_workers.dart` and the Worker Professional Info form).
+const kWorkerAvailabilityOptions = <String>[
+  'Full Week',
+  'Weekdays',
+  'Weekends',
+  'Morning Shift',
+  'Evening Shift',
+];
 
 /// The single place that turns (jobs, search text, filters, sort) into the
 /// list the Jobs screen renders. Kept as pure static logic — no widget or

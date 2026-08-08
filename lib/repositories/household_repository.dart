@@ -41,14 +41,26 @@ class HouseholdRepository {
     return localUid.isNotEmpty ? localUid : null;
   }
 
+  /// Live household profile. Falls back to [kDemoHouseholdProfile] whenever
+  /// there's no real name to show yet — no signed-in session, or a
+  /// signed-in household whose Firestore document hasn't been written (or
+  /// doesn't have a name) — so Home never falls back to a bare "Guest"
+  /// greeting. Once the real profile has a name, this switches to it
+  /// automatically; the UI never needs to change.
   Stream<HouseholdProfile> profileStream() {
     final uid = _uid();
     if (uid == null) {
-      return Stream.value(HouseholdProfile.fromMap(LocalWorkerSession.data));
+      final local = HouseholdProfile.fromMap(LocalWorkerSession.data);
+      return Stream.value(
+          local.name.isEmpty ? kDemoHouseholdProfile : local);
     }
     return _firestore.collection('households').doc(uid).snapshots().map(
-          (doc) => HouseholdProfile.fromMap(doc.data() ?? const {}, id: doc.id),
-        );
+      (doc) {
+        final profile =
+            HouseholdProfile.fromMap(doc.data() ?? const {}, id: doc.id);
+        return profile.name.isEmpty ? kDemoHouseholdProfile : profile;
+      },
+    );
   }
 
   /// Live list of workers.  When Firestore's `workers` collection is empty
