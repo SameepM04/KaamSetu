@@ -31,6 +31,8 @@ class SavedJobEntry {
     required this.postedAt,
     required this.category,
     required this.savedAt,
+    this.latitude,
+    this.longitude,
   });
 
   final String jobId;
@@ -42,6 +44,12 @@ class SavedJobEntry {
   final String postedAt;
   final String category;
   final DateTime? savedAt;
+
+  /// Same "single source of truth" coordinates as [JobPreview.latitude] /
+  /// [JobPreview.longitude] — carried through so a saved job still opens
+  /// the correct Google Maps destination, not a fallback/wrong one.
+  final double? latitude;
+  final double? longitude;
 
   factory SavedJobEntry.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const {};
@@ -55,6 +63,8 @@ class SavedJobEntry {
       postedAt: (data['postedAt'] as String?) ?? '',
       category: (data['category'] as String?) ?? '',
       savedAt: (data['savedAt'] as Timestamp?)?.toDate(),
+      latitude: (data['latitude'] as num?)?.toDouble(),
+      longitude: (data['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -69,6 +79,8 @@ class SavedJobEntry {
         postedAt: job.postedAgo,
         category: JobCategoryMapper.filterValue(job.category),
         savedAt: savedAt,
+        latitude: job.latitude,
+        longitude: job.longitude,
       );
 
   /// Reconstructs a [JobPreview] so the exact same [JobPreviewCard] widget
@@ -83,6 +95,8 @@ class SavedJobEntry {
         postedAgo: postedAt,
         pay: salary,
         categoryOverride: JobCategoryMapper.fromStorage(category),
+        latitude: latitude,
+        longitude: longitude,
       );
 }
 
@@ -261,6 +275,11 @@ class JobsRepository {
       status: (data['status'] as String?) ?? 'open',
       categoryOverride: JobCategoryMapper.fromStorage(data['category']),
       postedAt: postedAt,
+      // Single source of truth for map navigation (see
+      // MapNavigationService) — only present when the job document
+      // actually has it; never invented or defaulted here.
+      latitude: (data['latitude'] as num?)?.toDouble(),
+      longitude: (data['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -359,6 +378,8 @@ class JobsRepository {
       'postedAt': job.postedAgo,
       'category': JobCategoryMapper.filterValue(job.category),
       'savedAt': FieldValue.serverTimestamp(),
+      if (job.latitude != null) 'latitude': job.latitude,
+      if (job.longitude != null) 'longitude': job.longitude,
     });
   }
 
@@ -571,6 +592,8 @@ class JobsRepository {
           'status': ApplicationStatus.pending.name,
           'jobType': JobTypeMapper.displayName(job.jobType),
           'distance': job.distanceKm,
+          if (job.latitude != null) 'latitude': job.latitude,
+          if (job.longitude != null) 'longitude': job.longitude,
         });
         created = true;
       });
@@ -952,6 +975,8 @@ class ApplicationEntry {
     this.workerReview,
     this.workerThumbUp,
     this.workerRatedAt,
+    this.latitude,
+    this.longitude,
   });
 
   final String jobId;
@@ -965,6 +990,12 @@ class ApplicationEntry {
   final bool hasKnownStatus;
   final String jobType;
   final String distance;
+
+  /// Same "single source of truth" coordinates as [JobPreview.latitude] /
+  /// [JobPreview.longitude] — carried through so an applied job still
+  /// opens the correct Google Maps destination.
+  final double? latitude;
+  final double? longitude;
 
   // Phase 3C/3D timeline + withdraw timestamps. Reused from the same
   // `applications` document already streamed by [JobsRepository] — no new
@@ -1030,6 +1061,8 @@ class ApplicationEntry {
       workerReview: data['workerReview'] as String?,
       workerThumbUp: data['workerThumbUp'] as bool?,
       workerRatedAt: (data['workerRatedAt'] as Timestamp?)?.toDate(),
+      latitude: (data['latitude'] as num?)?.toDouble(),
+      longitude: (data['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -1063,5 +1096,7 @@ class ApplicationEntry {
           (type) => JobTypeMapper.displayName(type) == jobType,
           orElse: () => JobType.fullTime,
         ),
+        latitude: latitude,
+        longitude: longitude,
       );
 }
