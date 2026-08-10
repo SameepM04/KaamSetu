@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../animations/page_transition.dart';
+import '../data/profile_completion.dart';
 import '../services/local_worker_session.dart';
 import '../services/worker_auth_service.dart';
 import '../theme/app_colors.dart';
-import '../widgets/home/worker_profile_avatar.dart';
+import '../widgets/home/profile_avatar_editor.dart';
 import 'profile/edit_profile_screen.dart';
 import 'profile/ratings_screen.dart';
 import 'settings/settings_screen.dart';
@@ -22,9 +23,14 @@ import 'settings/settings_screen.dart';
 /// All editing of Basic + Professional information lives inside
 /// [EditProfileScreen]. There are no standalone section cards pointing to
 /// separate edit screens.
-class WorkerProfileScreen extends StatelessWidget {
+class WorkerProfileScreen extends StatefulWidget {
   const WorkerProfileScreen({super.key});
 
+  @override
+  State<WorkerProfileScreen> createState() => _WorkerProfileScreenState();
+}
+
+class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
   static final _workerService = WorkerAuthService();
 
   @override
@@ -36,6 +42,7 @@ class WorkerProfileScreen extends StatelessWidget {
         data: LocalWorkerSession.data,
         loading: false,
         hasError: false,
+        onEditComplete: () => setState(() {}),
       );
     }
 
@@ -50,6 +57,7 @@ class WorkerProfileScreen extends StatelessWidget {
           data: data,
           loading: loading,
           hasError: hasError,
+          onEditComplete: null,
         );
       },
     );
@@ -61,11 +69,13 @@ class _WorkerProfileBody extends StatefulWidget {
     required this.data,
     required this.loading,
     required this.hasError,
+    this.onEditComplete,
   });
 
   final Map<String, dynamic> data;
   final bool loading;
   final bool hasError;
+  final VoidCallback? onEditComplete;
 
   @override
   State<_WorkerProfileBody> createState() => _WorkerProfileBodyState();
@@ -115,7 +125,7 @@ class _WorkerProfileBodyState extends State<_WorkerProfileBody> {
         bottom: false,
         child: widget.loading
             ? const _ProfileSkeleton()
-            : _ProfileContent(data: widget.data),
+            : _ProfileContent(data: widget.data, onEditComplete: widget.onEditComplete),
       ),
     );
   }
@@ -126,12 +136,13 @@ class _WorkerProfileBodyState extends State<_WorkerProfileBody> {
 // ---------------------------------------------------------------------------
 
 class _ProfileContent extends StatelessWidget {
-  const _ProfileContent({required this.data});
+  const _ProfileContent({required this.data, this.onEditComplete});
   final Map<String, dynamic> data;
+  final VoidCallback? onEditComplete;
 
   @override
   Widget build(BuildContext context) {
-    final completion = _ProfileCompletion.compute(data);
+    final completion = ProfileCompletion.compute(data);
 
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
@@ -144,7 +155,7 @@ class _ProfileContent extends StatelessWidget {
               children: [
                 _ProfileTopBar(),
                 const SizedBox(height: 18),
-                _ProfileHeaderCard(data: data, completion: completion),
+                _ProfileHeaderCard(data: data, completion: completion, onEditComplete: onEditComplete),
                 const SizedBox(height: 22),
               ],
             ),
@@ -190,10 +201,11 @@ class _ProfileTopBar extends StatelessWidget {
 
 class _ProfileHeaderCard extends StatelessWidget {
   const _ProfileHeaderCard(
-      {required this.data, required this.completion});
+      {required this.data, required this.completion, this.onEditComplete});
 
   final Map<String, dynamic> data;
   final double completion;
+  final VoidCallback? onEditComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -225,10 +237,11 @@ class _ProfileHeaderCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              WorkerProfileAvatar(
+              ProfileAvatarEditor(
                 selectedAvatar: selectedAvatar,
                 profilePhotoURL: profilePhotoURL,
                 size: 72,
+                onPhotoPicked: (bytes) => WorkerAuthService().updateProfilePhoto(bytes),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -293,40 +306,42 @@ class _ProfileHeaderCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: () =>
-                  Navigator.of(context).push(premiumPageRoute(
-                EditProfileScreen(
-                  initialFullName: name == 'Worker' ? '' : name,
-                  initialAddress: address ?? '',
-                  initialPhoneNumber: phone ?? '',
-                  initialSelectedAvatar: selectedAvatar,
-                  initialProfilePhotoURL: profilePhotoURL,
-                  initialSkills: (data['skills'] as List?)
-                          ?.cast<String>() ??
-                      const [],
-                  initialExperience:
-                      data['experienceYears'] as String?,
-                  initialCategories:
-                      (data['preferredCategories'] as List?)
-                              ?.cast<String>() ??
-                          const [],
-                  initialAvailability:
-                      (data['availability'] as List?)
-                              ?.cast<String>() ??
-                          const [],
-                  initialWorkingRadius:
-                      ((data['workingRadiusKm'] as num?)
-                                  ?.toDouble() ??
-                              5)
-                          .clamp(5.0, 50.0),
-                  initialDailyWage:
-                      (data['expectedDailyWage'] as num?)?.toInt(),
-                  initialLanguages:
-                      (data['languagesKnown'] as List?)
-                              ?.cast<String>() ??
-                          const [],
-                ),
-              )),
+              onPressed: () async {
+                await Navigator.of(context).push(premiumPageRoute(
+                  EditProfileScreen(
+                    initialFullName: name == 'Worker' ? '' : name,
+                    initialAddress: address ?? '',
+                    initialPhoneNumber: phone ?? '',
+                    initialSelectedAvatar: selectedAvatar,
+                    initialProfilePhotoURL: profilePhotoURL,
+                    initialSkills: (data['skills'] as List?)
+                            ?.cast<String>() ??
+                        const [],
+                    initialExperience:
+                        data['experienceYears'] as String?,
+                    initialCategories:
+                        (data['preferredCategories'] as List?)
+                                ?.cast<String>() ??
+                            const [],
+                    initialAvailability:
+                        (data['availability'] as List?)
+                                ?.cast<String>() ??
+                            const [],
+                    initialWorkingRadius:
+                        ((data['workingRadiusKm'] as num?)
+                                    ?.toDouble() ??
+                                5)
+                            .clamp(5.0, 50.0),
+                    initialDailyWage:
+                        (data['expectedDailyWage'] as num?)?.toInt(),
+                    initialLanguages:
+                        (data['languagesKnown'] as List?)
+                                ?.cast<String>() ??
+                            const [],
+                  ),
+                ));
+                onEditComplete?.call();
+              },
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.blue,
                 foregroundColor: Colors.white,
@@ -387,49 +402,6 @@ class _CompletionBar extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Profile completion calculation.
-///
-/// 10 equally-weighted fields. Phone number does NOT count.
-/// When all 10 are filled, completion = 100%.
-class _ProfileCompletion {
-  static const _weightedKeys = [
-    'profilePhotoURL',     // OR selectedAvatar is also ok
-    'fullName',
-    'address',
-    'skills',
-    'experienceYears',
-    'preferredCategories',
-    'availability',
-    'workingRadiusKm',
-    'expectedDailyWage',
-    'languagesKnown',
-  ];
-
-  static double compute(Map<String, dynamic> data) {
-    if (data.isEmpty) return 0;
-    var filled = 0;
-    for (final key in _weightedKeys) {
-      // profilePhotoURL: also check selectedAvatar as an alternative
-      if (key == 'profilePhotoURL') {
-        final hasPhoto = _isFilled(data['profilePhotoURL']);
-        final hasAvatar = _isFilled(data['selectedAvatar']);
-        if (hasPhoto || hasAvatar) filled++;
-        continue;
-      }
-      if (_isFilled(data[key])) filled++;
-    }
-    return filled / _weightedKeys.length;
-  }
-
-  static bool _isFilled(dynamic value) => switch (value) {
-        null => false,
-        String s => s.trim().isNotEmpty,
-        Iterable i => i.isNotEmpty,
-        num n => n > 0,
-        _ => true,
-      };
 }
 
 // ---------------------------------------------------------------------------

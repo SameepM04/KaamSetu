@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +11,7 @@ import '../widgets/animated_background.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/otp_field_row.dart';
 import '../widgets/profile_photo_sheet.dart';
+import '../widgets/success_dialog.dart';
 import 'household_home_screen.dart';
 import 'worker_home_screen.dart';
 
@@ -24,7 +25,7 @@ class OtpVerificationScreen extends StatefulWidget {
     required this.phoneNumber,
     required this.fullName,
     this.selectedAvatar,
-    this.galleryImage,
+    this.galleryImageBytes,
     this.role = 'worker',
   });
 
@@ -32,7 +33,7 @@ class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
   final String fullName;
   final ProfilePhotoAvatar? selectedAvatar;
-  final File? galleryImage;
+  final Uint8List? galleryImageBytes;
 
   /// `'worker'` or `'household'`. Controls which Firestore collection the
   /// account document is written to; the verification flow itself is
@@ -117,19 +118,30 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         fullName: widget.fullName,
         phoneNumber: widget.phoneNumber,
         selectedAvatar: widget.selectedAvatar,
-        galleryImage: widget.galleryImage,
+        galleryImageBytes: widget.galleryImageBytes,
         role: widget.role,
       );
       if (!mounted) return;
       // _verifying intentionally stays true here — the screen is about to
       // be replaced, so there's no stuck-loading state to reset.
+      // verifyOtpAndCreateWorker() has already succeeded (account +
+      // Firestore doc created), so the account-creation success animation
+      // plays here before handing off — the OTP step and account creation
+      // are the same operation in this flow.
+      final isHousehold = widget.role == 'household';
+      await SuccessDialog.show(
+        context,
+        title: isHousehold ? 'Account Created!' : 'Welcome to KaamSetu!',
+        message: isHousehold ? 'Welcome to KaamSetu' : null,
+      );
+      if (!mounted) return;
       // Workers land directly on Worker Home now — Complete Profile is no
       // longer a forced stop after sign up; it only opens from inside Home
       // (the "Complete Your Profile" card, or an Apply attempt before the
       // profile is complete). Household accounts keep landing on the
       // placeholder Complete Profile screen until Household Home exists.
       Navigator.of(context).pushReplacement(
-        widget.role == 'household'
+        isHousehold
             ? premiumPageRoute(const HouseholdHomeScreen())
             : premiumPageRoute(const WorkerHomeScreen()),
       );

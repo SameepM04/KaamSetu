@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -76,7 +76,7 @@ class WorkerAuthService implements AuthService {
     required String fullName,
     required String phoneNumber,
     ProfilePhotoAvatar? selectedAvatar,
-    File? galleryImage,
+    Uint8List? galleryImageBytes,
     String role = 'worker',
   }) {
     return _impl.verifyOtpAndCreateWorker(
@@ -85,7 +85,7 @@ class WorkerAuthService implements AuthService {
       fullName: fullName,
       phoneNumber: phoneNumber,
       selectedAvatar: selectedAvatar,
-      galleryImage: galleryImage,
+      galleryImageBytes: galleryImageBytes,
       role: role,
     );
   }
@@ -101,7 +101,7 @@ class WorkerAuthService implements AuthService {
     required String fullName,
     required String address,
     String? selectedAvatar,
-    File? newPhotoFile,
+    Uint8List? newPhotoBytes,
     required List<String> skills,
     required String experience,
     required List<String> preferredCategories,
@@ -114,7 +114,7 @@ class WorkerAuthService implements AuthService {
       fullName: fullName,
       address: address,
       selectedAvatar: selectedAvatar,
-      newPhotoFile: newPhotoFile,
+      newPhotoBytes: newPhotoBytes,
       skills: skills,
       experience: experience,
       preferredCategories: preferredCategories,
@@ -130,4 +130,8 @@ class WorkerAuthService implements AuthService {
   /// app to a logged-out state. Used by the Logout action.
   @override
   Future<void> signOut() => _impl.signOut();
+
+  /// Quick photo-only update, used by the profile avatar's pencil button.
+  @override
+  Future<void> updateProfilePhoto(Uint8List bytes) => _impl.updateProfilePhoto(bytes);
 }

@@ -18,17 +18,22 @@ class ApplicationTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final steps = JobsRepository.instance.applicationTimeline(entry);
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    // Each step gets an equal share of the available width (Task 1 fix) so
+    // "Employer Viewed" and "Accepted" never crowd/overlap each other on
+    // narrow screens — previously each step had a fixed 96px, left-aligned
+    // width, which visually mashed the middle/last labels together.
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (var i = 0; i < steps.length; i++)
-            _TimelineStep(
-              step: steps[i],
-              isFirst: i == 0,
-              isLast: i == steps.length - 1,
+            Expanded(
+              child: _TimelineStep(
+                step: steps[i],
+                isFirst: i == 0,
+                isLast: i == steps.length - 1,
+              ),
             ),
         ],
       ),
@@ -69,65 +74,68 @@ class _TimelineStep extends StatelessWidget {
         ? AppColors.inkMuted
         : AppColors.navy;
 
-    return SizedBox(
-      width: 96,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 3,
-                  color: isFirst ? Colors.transparent : connectorColor,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 3,
+                color: isFirst ? Colors.transparent : connectorColor,
               ),
-              Container(
-                width: 26,
-                height: 26,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: dotBg,
-                  border: step.state == TimelineStepState.upcoming
-                      ? Border.all(color: AppColors.line, width: 2)
-                      : null,
-                ),
-                child: Icon(icon, size: 15, color: dotFg),
-              ),
-              Expanded(
-                child: Container(
-                  height: 3,
-                  color: isLast ? Colors.transparent : connectorColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            step.label,
-            maxLines: 2,
-            style: TextStyle(
-              color: labelColor,
-              fontSize: 11,
-              fontWeight: step.state == TimelineStepState.current
-                  ? FontWeight.w800
-                  : FontWeight.w700,
             ),
-          ),
-          if (step.timestamp != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              _formatTimelineDate(step.timestamp!),
-              style: const TextStyle(
-                color: AppColors.inkMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+            Container(
+              width: 26,
+              height: 26,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dotBg,
+                border: step.state == TimelineStepState.upcoming
+                    ? Border.all(color: AppColors.line, width: 2)
+                    : null,
+              ),
+              child: Icon(icon, size: 15, color: dotFg),
+            ),
+            Expanded(
+              child: Container(
+                height: 3,
+                color: isLast ? Colors.transparent : connectorColor,
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 6),
+        // Centered + allowed to wrap onto a second line (e.g. "Employer" /
+        // "Viewed") rather than truncating — each step now owns an equal,
+        // bounded share of the row's width via the Expanded above, so
+        // neighboring labels can no longer collide.
+        Text(
+          step.label,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          style: TextStyle(
+            color: labelColor,
+            fontSize: 11,
+            fontWeight: step.state == TimelineStepState.current
+                ? FontWeight.w800
+                : FontWeight.w700,
+          ),
+        ),
+        if (step.timestamp != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            _formatTimelineDate(step.timestamp!),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.inkMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 }

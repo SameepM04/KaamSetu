@@ -1,6 +1,8 @@
 import 'dart:io' show File, SocketException;
+import 'dart:typed_data';
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseException;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:image_cropper/image_cropper.dart';
@@ -8,8 +10,10 @@ import 'package:image_cropper/image_cropper.dart';
 import '../../data/job_categories.dart';
 import '../../services/worker_auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/home/photo_viewer_screen.dart';
 import '../../widgets/home/worker_profile_avatar.dart';
 import '../../widgets/profile_photo_sheet.dart';
+import '../../widgets/success_dialog.dart';
 
 // ---------------------------------------------------------------------------
 // Constants shared across bottom sheets
@@ -116,7 +120,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _addressController;
 
   // Avatar/photo state
-  File? _pendingPhotoFile;
+  Uint8List? _pendingPhotoBytes;
   String? _pendingAvatar; // 'male' | 'female' | null
   bool _pickingPhoto = false;
 
@@ -175,31 +179,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         // this branch was silently dropped.
         setState(() {
           _pendingAvatar = selection.avatar!.name; // 'male' or 'female'
-          _pendingPhotoFile = null; // clear any pending upload
+          _pendingPhotoBytes = null; // clear any pending upload
         });
-      } else if (selection.imageFile != null) {
-        // Gallery / Camera image — crop before applying.
-        final cropped = await ImageCropper().cropImage(
-          sourcePath: selection.imageFile!.path,
-          aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-          compressQuality: 90,
-          uiSettings: [
-            AndroidUiSettings(
-              toolbarTitle: 'Crop Photo',
-              toolbarColor: AppColors.navy,
-              toolbarWidgetColor: Colors.white,
-              lockAspectRatio: true,
-            ),
-            IOSUiSettings(
-              title: 'Crop Photo',
-              aspectRatioLockEnabled: true,
-            ),
-          ],
-        );
-        if (cropped != null && mounted) {
+      } else if (selection.imageBytes != null) {
+        // Gallery / Camera image.
+        //
+        // `image_cropper` only works on native platforms (it shells out to
+        // an Android/iOS cropping UI) — it is not Web-compatible, so on
+        // Web we skip straight to the picked bytes. `selection.imagePath`
+        // is always null on Web (see `profile_photo_sheet.dart`), which is
+        // also used here as the platform guard.
+        if (!kIsWeb && selection.imagePath != null) {
+          final cropped = await ImageCropper().cropImage(
+            sourcePath: selection.imagePath!,
+            aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+            compressQuality: 90,
+            uiSettings: [
+              AndroidUiSettings(
+                toolbarTitle: 'Crop Photo',
+                toolbarColor: AppColors.navy,
+                toolbarWidgetColor: Colors.white,
+                lockAspectRatio: true,
+              ),
+              IOSUiSettings(
+                title: 'Crop Photo',
+                aspectRatioLockEnabled: true,
+              ),
+            ],
+          );
+          if (cropped != null && mounted) {
+            final croppedBytes = await File(cropped.path).readAsBytes();
+            setState(() {
+              _pendingPhotoBytes = croppedBytes;
+              _pendingAvatar = null; // clear avatar when a real photo chosen
+            });
+          }
+        } else {
           setState(() {
-            _pendingPhotoFile = File(cropped.path);
-            _pendingAvatar = null; // clear avatar when a real photo is chosen
+            _pendingPhotoBytes = selection.imageBytes;
+            _pendingAvatar = null; // clear avatar when a real photo chosen
           });
         }
       }
@@ -210,6 +228,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } finally {
       if (mounted) setState(() => _pickingPhoto = false);
     }
+  }
+
+  void _viewPhoto() {
+    final hasReal = _pendingPhotoBytes != null ||
+        (widget.initialProfilePhotoURL != null &&
+            widget.initialProfilePhotoURL!.isNotEmpty);
+    if (!hasReal) return;
+    PhotoViewerScreen.show(
+      context,
+      imageBytes: _pendingPhotoBytes,
+      imageUrl:
+          _pendingPhotoBytes == null ? widget.initialProfilePhotoURL : null,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -232,7 +263,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         fullName: _nameController.text.trim(),
         address: _addressController.text.trim(),
         selectedAvatar: _pendingAvatar,
-        newPhotoFile: _pendingPhotoFile,
+        newPhotoBytes: _pendingPhotoBytes,
         skills: _skills.toList(),
         experience: _experience ?? '',
         preferredCategories:
@@ -243,14 +274,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         languages: _languages.toList(),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.green,
-          content: Text('Profile saved successfully!',
-              style: TextStyle(fontWeight: FontWeight.w700)),
-        ));
+      await SuccessDialog.show(
+        context,
+        title: 'Profile Updated',
+        message: 'Your profile has been updated successfully.',
+      );
+      if (!mounted) return;
       Navigator.of(context).pop();
     } on FirebaseException catch (e) {
       _showError(_firebaseMessage(e));
@@ -369,7 +398,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // Determine displayed avatar: pending pick overrides initial values
     final displayAvatar = _pendingAvatar ?? widget.initialSelectedAvatar;
     final displayPhotoURL =
-        _pendingPhotoFile != null ? null : widget.initialProfilePhotoURL;
+        _pendingPhotoBytes != null ? null : widget.initialProfilePhotoURL;
 
     return Scaffold(
       backgroundColor: AppColors.mist,
@@ -391,11 +420,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               // ── Profile Photo ──────────────────────────────────────────
               Center(
                 child: _PhotoPicker(
-                  pendingFile: _pendingPhotoFile,
+                  pendingBytes: _pendingPhotoBytes,
                   selectedAvatar: displayAvatar,
                   profilePhotoURL: displayPhotoURL,
                   busy: _pickingPhoto,
-                  onTap: _pickPhoto,
+                  onTapPhoto: _viewPhoto,
+                  onTapPencil: _pickPhoto,
                 ),
               ),
               const SizedBox(height: 28),
@@ -743,51 +773,67 @@ class _ProFieldRow extends StatelessWidget {
 
 class _PhotoPicker extends StatelessWidget {
   const _PhotoPicker({
-    required this.pendingFile,
+    required this.pendingBytes,
     required this.selectedAvatar,
     required this.profilePhotoURL,
     required this.busy,
-    required this.onTap,
+    required this.onTapPhoto,
+    required this.onTapPencil,
   });
 
-  final File? pendingFile;
+  final Uint8List? pendingBytes;
   final String? selectedAvatar;
   final String? profilePhotoURL;
   final bool busy;
-  final VoidCallback onTap;
+
+  /// Tapping the photo itself: opens the full-screen viewer, but only when
+  /// a real photo exists — it must NEVER open the male/female avatar
+  /// picker (that used to be the bug: a single shared tap handler covered
+  /// the whole avatar+pencil stack).
+  final VoidCallback onTapPhoto;
+
+  /// Tapping the pencil/camera button: always opens the photo picker.
+  final VoidCallback onTapPencil;
+
+  bool get _hasRealPhoto =>
+      pendingBytes != null ||
+      (profilePhotoURL != null && profilePhotoURL!.isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: busy ? null : onTap,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          if (pendingFile != null)
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-                boxShadow: const [
-                  BoxShadow(
-                      color: Color(0x22102A54),
-                      blurRadius: 10,
-                      offset: Offset(0, 4))
-                ],
-              ),
-              child: ClipOval(child: Image.file(pendingFile!, fit: BoxFit.cover)),
-            )
-          else
-            WorkerProfileAvatar(
-              selectedAvatar: selectedAvatar,
-              profilePhotoURL: profilePhotoURL,
-              size: 100,
-            ),
-          Positioned(
-            right: -2,
-            bottom: -2,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        GestureDetector(
+          onTap: _hasRealPhoto ? onTapPhoto : null,
+          child: pendingBytes != null
+              ? Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Color(0x22102A54),
+                          blurRadius: 10,
+                          offset: Offset(0, 4))
+                    ],
+                  ),
+                  child: ClipOval(
+                      child: Image.memory(pendingBytes!, fit: BoxFit.cover)),
+                )
+              : WorkerProfileAvatar(
+                  selectedAvatar: selectedAvatar,
+                  profilePhotoURL: profilePhotoURL,
+                  size: 100,
+                ),
+        ),
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: GestureDetector(
+            onTap: busy ? null : onTapPencil,
             child: Container(
               width: 34,
               height: 34,
@@ -808,8 +854,8 @@ class _PhotoPicker extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

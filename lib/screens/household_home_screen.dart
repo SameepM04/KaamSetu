@@ -9,9 +9,11 @@ import '../repositories/household_repository.dart';
 import '../services/worker_auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/home/category_icon.dart';
-import '../widgets/home/worker_profile_avatar.dart';
+import '../widgets/home/profile_avatar_editor.dart';
 import '../widgets/jobs/job_filter_sheet.dart';
+import '../widgets/success_dialog.dart';
 import 'all_categories_screen.dart';
+import 'job_summary_screen.dart';
 import 'login_screen.dart';
 import 'recommended_workers_screen.dart';
 import 'settings/help_screen.dart';
@@ -87,7 +89,7 @@ class _HouseholdBottomNav extends StatelessWidget {
                         children: [
                           Icon(
                             i == index ? _items[i].$1 : _items[i].$2,
-                            size: 23,
+                            size: 24,
                             color: i == index
                                 ? AppColors.blue
                                 : AppColors.inkMuted,
@@ -96,8 +98,9 @@ class _HouseholdBottomNav extends StatelessWidget {
                           Text(
                             _items[i].$3,
                             maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 10.5,
                               color: i == index
                                   ? AppColors.blue
                                   : AppColors.inkMuted,
@@ -175,7 +178,7 @@ class _SectionTitle extends StatelessWidget {
               text,
               style: const TextStyle(
                 color: AppColors.navy,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 fontSize: 18,
               ),
             ),
@@ -204,9 +207,15 @@ class _EmptyCard extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(17),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.line.withValues(alpha: .7)),
         ),
-        child: Text(message, style: const TextStyle(color: AppColors.inkMuted)),
+        child: Text(message,
+            style: const TextStyle(
+                color: AppColors.inkMuted,
+                fontSize: 13.5,
+                height: 1.4,
+                fontWeight: FontWeight.w400)),
       );
 }
 
@@ -248,17 +257,18 @@ class _StatusChip extends StatelessWidget {
       _ => AppColors.orange,
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: .12),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(30),
       ),
       child: Text(
         label,
         style: TextStyle(
           color: color,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .1,
         ),
       ),
     );
@@ -275,16 +285,23 @@ class _ProfileTile extends StatelessWidget {
   final String title, subtitle;
   @override
   Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.line),
         ),
         child: Row(
           children: [
-            Icon(icon, color: AppColors.blue),
-            const SizedBox(width: 12),
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                  color: AppColors.blue.withValues(alpha: .12),
+                  shape: BoxShape.circle),
+              child: Icon(icon, color: AppColors.blue, size: 20),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,13 +310,19 @@ class _ProfileTile extends StatelessWidget {
                     title,
                     style: const TextStyle(
                       color: AppColors.navy,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        color: AppColors.inkMuted, fontSize: 12),
+                        color: AppColors.inkMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -656,10 +679,12 @@ class _DashboardHeader extends StatelessWidget {
           ),
           _HouseholdNotificationBell(onTap: () {}),
           const SizedBox(width: 12),
-          WorkerProfileAvatar(
+          ProfileAvatarEditor(
             selectedAvatar: profile?.avatar ?? kDemoHouseholdProfile.avatar,
             profilePhotoURL: profile?.photoUrl,
-            size: 46,
+            size: 40,
+            onPhotoPicked: (bytes) =>
+                HouseholdRepository.instance.updateProfilePhoto(bytes),
           ),
         ],
       );
@@ -714,8 +739,8 @@ class _HouseholdGreetingBlock extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.navy,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 23,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -.4,
                   ),
                 ),
@@ -731,7 +756,7 @@ class _HouseholdGreetingBlock extends StatelessWidget {
               color: AppColors.inkMuted,
               fontSize: 14,
               height: 1.32,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -802,7 +827,7 @@ class _PostJobHeroCard extends StatelessWidget {
                     style: TextStyle(
                       color: AppColors.navy,
                       fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -810,13 +835,14 @@ class _PostJobHeroCard extends StatelessWidget {
                     'Find the right worker for your needs',
                     style: TextStyle(
                       color: AppColors.inkMuted,
-                      fontSize: 12.5,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                   const SizedBox(height: 16),
                   _PressableScale(
                     onTap: onPost,
-                    borderRadius: 14,
+                    borderRadius: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -824,7 +850,7 @@ class _PostJobHeroCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.blue,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -836,8 +862,8 @@ class _PostJobHeroCard extends StatelessWidget {
                             'Post Job',
                             style: TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
                             ),
                           ),
                         ],
@@ -1381,38 +1407,57 @@ class JobCard extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (_) => HouseholdJobDetailsScreen(job: job)),
+            builder: (_) => job.status == 'completed'
+                ? JobSummaryScreen(job: job)
+                : HouseholdJobDetailsScreen(job: job),
+          ),
         ),
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(19),
-            border: Border.all(color: AppColors.line),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.line.withValues(alpha: .7)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.navy.withValues(alpha: .04),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
                       job.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.navy,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                         fontSize: 16,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   _StatusChip(job.status),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 '${job.category}  •  ${job.location}',
-                style: const TextStyle(color: AppColors.inkMuted, fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: AppColors.inkMuted,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400),
               ),
               const SizedBox(height: 12),
               Row(
@@ -1422,11 +1467,13 @@ class JobCard extends StatelessWidget {
                     size: 16,
                     color: AppColors.green,
                   ),
+                  const SizedBox(width: 2),
                   Text(
                     job.budget,
                     style: const TextStyle(
                       color: AppColors.green,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
                     ),
                   ),
                   const Spacer(),
@@ -1436,7 +1483,9 @@ class JobCard extends StatelessWidget {
                   Text(
                     '${job.applicants} applicants',
                     style: const TextStyle(
-                        color: AppColors.inkMuted, fontSize: 12),
+                        color: AppColors.inkMuted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w400),
                   ),
                 ],
               ),
@@ -1445,10 +1494,12 @@ class JobCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
                     'Assigned: ${job.selectedWorkerName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppColors.blue,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -1533,12 +1584,12 @@ class _PostJobScreenState extends State<PostJobScreen> {
         additionalNotes: _notes.text.trim(),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Your job is live. Workers can apply now! 🎉'),
-            backgroundColor: AppColors.green,
-          ),
+        await SuccessDialog.show(
+          context,
+          title: 'Job Posted!',
+          message: 'Your job is now visible to suitable workers.',
         );
+        if (!mounted) return;
         // Clear form
         _title.clear();
         _description.clear();
@@ -1838,79 +1889,127 @@ class HouseholdProfileScreen extends StatelessWidget {
               final hasName = p != null && p.name.isNotEmpty;
               final hasAddress = p != null && p.address.isNotEmpty;
               return ListView(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
                 children: [
                   const Text(
                     'Profile',
                     style: TextStyle(
                       color: AppColors.navy,
-                      fontSize: 26,
+                      fontSize: 22,
                       fontWeight: FontWeight.w800,
+                      letterSpacing: -.4,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Center(
-                    child: CircleAvatar(
-                      radius: 46,
-                      backgroundColor: AppColors.blue.withValues(alpha: .12),
-                      backgroundImage: p?.photoUrl == null
-                          ? null
-                          : NetworkImage(p!.photoUrl!),
-                      child: p?.photoUrl == null
-                          ? const Icon(
-                              Icons.home_rounded,
-                              color: AppColors.blue,
-                              size: 38,
-                            )
-                          : null,
+                  const SizedBox(height: 18),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: AppColors.line),
+                      boxShadow: const [
+                        BoxShadow(
+                            color: Color(0x14102A54),
+                            blurRadius: 18,
+                            offset: Offset(0, 8))
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        ProfileAvatarEditor(
+                          selectedAvatar: p?.avatar,
+                          profilePhotoURL: p?.photoUrl,
+                          size: 84,
+                          onPhotoPicked: (bytes) =>
+                              HouseholdRepository.instance.updateProfilePhoto(bytes),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          hasName ? p.name : 'Household',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.navy,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.place_rounded,
+                                color: AppColors.inkMuted, size: 14),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                hasAddress
+                                    ? p.address
+                                    : 'Add your address in profile settings',
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: AppColors.inkMuted,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Center(
+                  const SizedBox(height: 22),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 2, bottom: 10),
                     child: Text(
-                      hasName ? p.name : 'Household',
-                      style: const TextStyle(
+                      'Household Information',
+                      style: TextStyle(
                         color: AppColors.navy,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Center(
-                    child: Text(
-                      hasAddress
-                          ? p.address
-                          : 'Add your address in profile settings',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.inkMuted),
-                    ),
-                  ),
-                  const SizedBox(height: 26),
                   _ProfileTile(
                     icon: Icons.location_on_outlined,
                     title: 'Address',
                     subtitle: hasAddress ? p.address : 'Not added yet',
                   ),
+                  const SizedBox(height: 10),
                   const _ProfileTile(
                     icon: Icons.verified_user_outlined,
                     title: 'Account status',
                     subtitle: 'Verified household',
                   ),
-                  const SizedBox(height: 18),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      await WorkerAuthService().signOut();
-                      if (context.mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                              builder: (_) => const LoginScreen()),
-                          (_) => false,
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Log out'),
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await WorkerAuthService().signOut();
+                        if (context.mounted) {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                                builder: (_) => const LoginScreen()),
+                            (_) => false,
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Log out',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.navy,
+                        side: const BorderSide(color: AppColors.line),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
                   ),
                 ],
               );
@@ -2063,9 +2162,9 @@ class WorkerDetailScreen extends StatelessWidget {
     );
   }
 
-  void _invite(BuildContext context) {
+  void _invite(BuildContext parentContext) {
     showModalBottomSheet(
-      context: context,
+      context: parentContext,
       builder: (sheetContext) => StreamBuilder<List<HouseholdJob>>(
         stream: HouseholdRepository.instance.myJobsStream(),
         builder: (context, snapshot) {
@@ -2097,6 +2196,12 @@ class WorkerDetailScreen extends StatelessWidget {
                               );
                               if (sheetContext.mounted) {
                                 Navigator.pop(sheetContext);
+                              }
+                              if (parentContext.mounted) {
+                                await SuccessDialog.show(
+                                  parentContext,
+                                  title: 'Worker Hired!',
+                                );
                               }
                             },
                           ),
@@ -2361,11 +2466,10 @@ class HouseholdJobDetailsScreen extends StatelessWidget {
               Navigator.pop(ctx);
               await HouseholdRepository.instance.markJobComplete(jobId);
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Job marked as complete! 🎉'),
-                    backgroundColor: AppColors.green,
-                  ),
+                await SuccessDialog.show(
+                  context,
+                  title: 'Job Completed!',
+                  message: 'Great! Your job has been completed.',
                 );
               }
             },
@@ -2402,13 +2506,20 @@ class _ApplicationCard extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: CircleAvatar(
               backgroundColor: AppColors.mist,
-              child: Text(
-                (worker?.name ?? 'W').substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.blue,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+              // Show the worker's actual saved profile photo/avatar when
+              // available (req. #5/#6) — falls back to their initial only
+              // when no photo is set, same fallback every other avatar in
+              // the app already uses.
+              backgroundImage: workerAvatarImage(worker?.photoUrl),
+              child: worker?.photoUrl == null
+                  ? Text(
+                      (worker?.name ?? 'W').substring(0, 1).toUpperCase(),
+                      style: const TextStyle(
+                        color: AppColors.blue,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    )
+                  : null,
             ),
             title: Row(
               children: [
@@ -2428,12 +2539,28 @@ class _ApplicationCard extends StatelessWidget {
             ),
             subtitle: Text(
               worker != null
-                  ? '★ ${worker.rating.toStringAsFixed(1)} · ${worker.completedJobs} jobs · ₹${worker.wage}/day'
+                  ? '★ ${worker.rating.toStringAsFixed(1)} · ${worker.reviews} reviews · ${worker.completedJobs} jobs · ₹${worker.wage}/day'
                   : application.status,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12),
             ),
             trailing: _StatusChip(application.status),
           ),
+          // Actual worker skills, read straight from their persisted
+          // profile (req. #8/#16) — same _Tag chip already used on
+          // Worker cards elsewhere, so no new UI style is introduced.
+          // Existing empty-state (no chips row at all) is preserved when
+          // the worker has no skills saved.
+          if (worker != null && worker.skills.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 56, top: 2, bottom: 2),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 5,
+                children: worker.skills.take(4).map((s) => _Tag(s)).toList(),
+              ),
+            ),
           if (application.status == 'pending' ||
               application.status == 'reviewed')
             Row(
@@ -2452,8 +2579,17 @@ class _ApplicationCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
-                    onPressed: () => HouseholdRepository.instance
-                        .updateApplication(application, 'accepted'),
+                    onPressed: () async {
+                      await HouseholdRepository.instance
+                          .updateApplication(application, 'accepted');
+                      if (context.mounted) {
+                        await SuccessDialog.show(
+                          context,
+                          title: 'Worker Accepted',
+                          message: 'The worker has been added to your job.',
+                        );
+                      }
+                    },
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.blue,
                     ),
@@ -2494,14 +2630,28 @@ class _RatingSection extends StatefulWidget {
 
 class _RatingSectionState extends State<_RatingSection> {
   double _rating = 0;
+  bool? _thumbUp;
   final _reviewCtrl = TextEditingController();
   bool _submitting = false;
   bool _submitted = false;
+  // Toggles the already-rated display back into the editable form,
+  // pre-filled with the existing values, so a household can revise its
+  // rating like a real app instead of it being locked forever.
+  bool _editing = false;
 
   @override
   void dispose() {
     _reviewCtrl.dispose();
     super.dispose();
+  }
+
+  void _startEditing() {
+    setState(() {
+      _rating = widget.job.householdRating ?? _rating;
+      _thumbUp = widget.job.householdThumbUp;
+      _reviewCtrl.text = widget.job.householdReview ?? _reviewCtrl.text;
+      _editing = true;
+    });
   }
 
   Future<void> _submit() async {
@@ -2511,21 +2661,30 @@ class _RatingSectionState extends State<_RatingSection> {
       );
       return;
     }
+    final isEdit = widget.job.isRatedByHousehold || _submitted;
     setState(() => _submitting = true);
     try {
+      // rateJob() set(merge:true)s the same jobs/{jobId} doc every time, so
+      // this UPDATES the existing rating on an edit rather than creating a
+      // second one.
       await HouseholdRepository.instance.rateJob(
-        jobId: widget.job.id,
+        job: widget.job,
         rating: _rating,
+        thumbUp: _thumbUp,
         review: _reviewCtrl.text.trim(),
         isHouseholdRating: true,
       );
       if (mounted) {
-        setState(() => _submitted = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Thank you for your rating! ⭐'),
-            backgroundColor: AppColors.green,
-          ),
+        setState(() {
+          _submitted = true;
+          _editing = false;
+        });
+        await SuccessDialog.show(
+          context,
+          title: isEdit ? 'Rating Updated' : 'Rating Submitted',
+          message: isEdit
+              ? 'Your rating has been updated.'
+              : 'Thanks for sharing your experience!',
         );
       }
     } catch (e) {
@@ -2540,8 +2699,10 @@ class _RatingSectionState extends State<_RatingSection> {
 
   @override
   Widget build(BuildContext context) {
-    // Already rated — show the existing rating
-    if (widget.job.isRatedByHousehold || _submitted) {
+    // Already rated — show the existing rating (unless the household has
+    // tapped "Edit Rating", in which case fall through to the form below,
+    // pre-filled via _startEditing()).
+    if ((widget.job.isRatedByHousehold || _submitted) && !_editing) {
       final displayRating = widget.job.householdRating ?? _rating;
       final displayReview = widget.job.householdReview ?? _reviewCtrl.text;
       return Container(
@@ -2581,6 +2742,18 @@ class _RatingSectionState extends State<_RatingSection> {
                 ),
               ),
             ),
+            if (widget.job.householdThumbUp != null) ...[
+              const SizedBox(height: 6),
+              Icon(
+                widget.job.householdThumbUp!
+                    ? Icons.thumb_up_alt_rounded
+                    : Icons.thumb_down_alt_rounded,
+                color: widget.job.householdThumbUp!
+                    ? AppColors.green
+                    : AppColors.inkMuted,
+                size: 20,
+              ),
+            ],
             if (displayReview.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -2591,12 +2764,29 @@ class _RatingSectionState extends State<_RatingSection> {
                 ),
               ),
             ],
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _startEditing,
+                icon: const Icon(Icons.edit_rounded, size: 16),
+                label: const Text('Edit Rating'),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
           ],
         ),
       );
     }
 
-    // Not yet rated — show the interactive picker
+    final isEdit = widget.job.isRatedByHousehold || _submitted;
+
+    // Not yet rated (or editing an existing rating) — show the interactive
+    // picker, pre-filled by _startEditing() when this is an edit.
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -2607,18 +2797,20 @@ class _RatingSectionState extends State<_RatingSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Rate this job',
-            style: TextStyle(
+          Text(
+            isEdit ? 'Edit Your Rating' : 'Rate this job',
+            style: const TextStyle(
               color: AppColors.navy,
               fontWeight: FontWeight.w800,
               fontSize: 16,
             ),
           ),
           const SizedBox(height: 5),
-          const Text(
-            'How was your experience with the worker?',
-            style: TextStyle(color: AppColors.inkMuted, fontSize: 12.5),
+          Text(
+            isEdit
+                ? 'Update your feedback for the worker.'
+                : 'How was your experience with the worker?',
+            style: const TextStyle(color: AppColors.inkMuted, fontSize: 12.5),
           ),
           const SizedBox(height: 14),
           Row(
@@ -2643,6 +2835,25 @@ class _RatingSectionState extends State<_RatingSection> {
                 ),
               );
             }),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _ThumbButton(
+                icon: Icons.thumb_up_alt_rounded,
+                selected: _thumbUp == true,
+                color: AppColors.green,
+                onTap: () => setState(() => _thumbUp = true),
+              ),
+              const SizedBox(width: 14),
+              _ThumbButton(
+                icon: Icons.thumb_down_alt_rounded,
+                selected: _thumbUp == false,
+                color: const Color(0xFFE53935),
+                onTap: () => setState(() => _thumbUp = false),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           TextField(
@@ -2674,16 +2885,59 @@ class _RatingSectionState extends State<_RatingSection> {
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2),
                     )
-                  : const Text(
-                      'Submit Rating',
-                      style: TextStyle(fontWeight: FontWeight.w800),
+                  : Text(
+                      isEdit ? 'Save Changes' : 'Submit Rating',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
             ),
           ),
+          if (isEdit) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: _submitting
+                    ? null
+                    : () => setState(() => _editing = false),
+                child: const Text('Cancel'),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+class _ThumbButton extends StatelessWidget {
+  const _ThumbButton({
+    required this.icon,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: .12) : AppColors.mist,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? color : AppColors.line,
+              width: 1.4,
+            ),
+          ),
+          child: Icon(icon, color: selected ? color : AppColors.inkMuted),
+        ),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -46,7 +46,7 @@ abstract class AuthService {
     required String fullName,
     required String phoneNumber,
     ProfilePhotoAvatar? selectedAvatar,
-    File? galleryImage,
+    Uint8List? galleryImageBytes,
     String role = 'worker',
   });
 
@@ -60,7 +60,7 @@ abstract class AuthService {
     required String fullName,
     required String address,
     String? selectedAvatar,
-    File? newPhotoFile,
+    Uint8List? newPhotoBytes,
     required List<String> skills,
     required String experience,
     required List<String> preferredCategories,
@@ -73,4 +73,13 @@ abstract class AuthService {
   /// Signs the current user out and clears whatever session state this
   /// implementation keeps, returning the app to a logged-out state.
   Future<void> signOut();
+
+  /// Uploads [bytes] as the signed-in worker's new profile photo and
+  /// saves its URL to `workers/{uid}.profilePhotoURL`, clearing any
+  /// preset `selectedAvatar` so the uploaded photo displays. Used by the
+  /// profile avatar's pencil/edit button for a quick photo-only update —
+  /// unlike [saveCompleteProfile], no other profile field is touched.
+  ///
+  /// Bytes (not a `dart:io File`) so this works unchanged on Flutter Web.
+  Future<void> updateProfilePhoto(Uint8List bytes);
 }

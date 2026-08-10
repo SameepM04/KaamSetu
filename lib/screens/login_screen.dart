@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/brand_logo.dart';
 import 'otp_verification_screen.dart';
+import 'role_selection_screen.dart';
 import '../animations/page_transition.dart';
 
 /// Login screen — Firebase Phone Authentication only (mobile number + Send
@@ -37,6 +38,30 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool get _isPhoneValid =>
       RegExp(r'^[6-9]\d{9}$').hasMatch(_phoneController.text.trim());
+
+  /// Shared destination for both the top-left back arrow and the Android
+  /// system back gesture.
+  ///
+  /// In the normal signed-out flow, [RoleSelectionScreen] pushes this
+  /// screen, so there's a previous route to pop back to and behavior is
+  /// unchanged. But after a Household/Worker logout, this screen becomes
+  /// the stack root (logout uses `pushAndRemoveUntil` to guarantee the
+  /// authenticated stack can never be popped back into — see
+  /// household_home_screen.dart / settings_screen.dart), so there's
+  /// nothing left to pop. In that case, navigate to the existing
+  /// unauthenticated [RoleSelectionScreen] instead, again clearing the
+  /// stack, so this login screen isn't left underneath it either.
+  void _goBack() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushAndRemoveUntil(
+        premiumPageRoute(const RoleSelectionScreen()),
+        (route) => false,
+      );
+    }
+  }
 
   Future<void> _sendOtp() async {
     if (!_isPhoneValid || _submitting) return;
@@ -80,8 +105,18 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final phoneTouched = _phoneController.text.isNotEmpty;
-    return Scaffold(
-      body: Stack(
+    return PopScope(
+      // Always intercept the system back gesture so it goes through the
+      // same _goBack() logic as the visible arrow, instead of Flutter's
+      // default pop (which would either do nothing when this screen is
+      // the stack root post-logout, or — worse — fall through to
+      // whatever is unexpectedly still underneath it).
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _goBack();
+      },
+      child: Scaffold(
+        body: Stack(
         children: [
           const Positioned.fill(
               child: AnimatedBackdrop(showAccentParticle: false)),
@@ -98,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     shadowColor: const Color(0x224775B4),
                     child: InkWell(
                       customBorder: const CircleBorder(),
-                      onTap: () => Navigator.of(context).maybePop(),
+                      onTap: _goBack,
                       child: const Padding(
                         padding: EdgeInsets.all(10),
                         child: Icon(Icons.arrow_back_ios_new_rounded,
@@ -262,6 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

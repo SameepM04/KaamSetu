@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -31,7 +31,7 @@ class _WorkerSignUpScreenState extends State<WorkerSignUpScreen>
   final _authService = WorkerAuthService();
 
   ProfilePhotoAvatar? _selectedAvatar;
-  File? _galleryImage;
+  Uint8List? _galleryImageBytes;
 
   late final AnimationController _photoAnim = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 260));
@@ -67,9 +67,9 @@ class _WorkerSignUpScreenState extends State<WorkerSignUpScreen>
     setState(() {
       if (result.avatar != null) {
         _selectedAvatar = result.avatar;
-        _galleryImage = null;
-      } else if (result.imageFile != null) {
-        _galleryImage = result.imageFile;
+        _galleryImageBytes = null;
+      } else if (result.imageBytes != null) {
+        _galleryImageBytes = result.imageBytes;
         _selectedAvatar = null;
       }
     });
@@ -99,7 +99,7 @@ class _WorkerSignUpScreenState extends State<WorkerSignUpScreen>
               phoneNumber: e164Phone,
               fullName: fullName,
               selectedAvatar: _selectedAvatar,
-              galleryImage: _galleryImage,
+              galleryImageBytes: _galleryImageBytes,
             ),
           ));
         },
@@ -172,7 +172,7 @@ class _WorkerSignUpScreenState extends State<WorkerSignUpScreen>
                     submitting: _submitting,
                     phoneError: _phoneError,
                     selectedAvatar: _selectedAvatar,
-                    galleryImage: _galleryImage,
+                    galleryImageBytes: _galleryImageBytes,
                     photoAnim: _photoAnim,
                     onTapPhoto: _openPhotoSheet,
                     onSubmit: _submit,
@@ -242,7 +242,7 @@ class _FormCard extends StatelessWidget {
     required this.submitting,
     required this.phoneError,
     required this.selectedAvatar,
-    required this.galleryImage,
+    required this.galleryImageBytes,
     required this.photoAnim,
     required this.onTapPhoto,
     required this.onSubmit,
@@ -256,7 +256,7 @@ class _FormCard extends StatelessWidget {
   final bool submitting;
   final String? phoneError;
   final ProfilePhotoAvatar? selectedAvatar;
-  final File? galleryImage;
+  final Uint8List? galleryImageBytes;
   final AnimationController photoAnim;
   final VoidCallback onTapPhoto;
   final VoidCallback onSubmit;
@@ -300,7 +300,7 @@ class _FormCard extends StatelessWidget {
                   CurvedAnimation(parent: photoAnim, curve: Curves.easeOutBack),
                 ),
                 child: _ProfilePhotoCircle(
-                    avatar: selectedAvatar, imageFile: galleryImage),
+                    avatar: selectedAvatar, imageBytes: galleryImageBytes),
               ),
             ),
           ),
@@ -334,7 +334,7 @@ class _FormCard extends StatelessWidget {
               Expanded(
                 child: _QuickPickTile(
                   label: 'Choose from\nGallery',
-                  selected: galleryImage != null,
+                  selected: galleryImageBytes != null,
                   onTap: onTapPhoto,
                   child: const Icon(Icons.image_rounded,
                       color: AppColors.blue, size: 28),
@@ -402,14 +402,14 @@ class _FormCard extends StatelessWidget {
 }
 
 class _ProfilePhotoCircle extends StatelessWidget {
-  const _ProfilePhotoCircle({required this.avatar, required this.imageFile});
+  const _ProfilePhotoCircle({required this.avatar, required this.imageBytes});
 
   final ProfilePhotoAvatar? avatar;
-  final File? imageFile;
+  final Uint8List? imageBytes;
 
   @override
   Widget build(BuildContext context) {
-    final hasSelection = avatar != null || imageFile != null;
+    final hasSelection = avatar != null || imageBytes != null;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -433,8 +433,8 @@ class _ProfilePhotoCircle extends StatelessWidget {
                 : null,
           ),
           child: ClipOval(
-            child: imageFile != null
-                ? Image.file(imageFile!, fit: BoxFit.cover)
+            child: imageBytes != null
+                ? Image.memory(imageBytes!, fit: BoxFit.cover)
                 : avatar != null
                     ? Image.asset(
                         avatar == ProfilePhotoAvatar.male

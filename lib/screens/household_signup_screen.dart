@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -36,7 +36,7 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
   final _authService = WorkerAuthService();
 
   ProfilePhotoAvatar? _selectedAvatar;
-  File? _galleryImage;
+  Uint8List? _galleryImageBytes;
 
   late final AnimationController _photoAnim = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 260));
@@ -75,9 +75,9 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
     setState(() {
       if (result.avatar != null) {
         _selectedAvatar = result.avatar;
-        _galleryImage = null;
-      } else if (result.imageFile != null) {
-        _galleryImage = result.imageFile;
+        _galleryImageBytes = null;
+      } else if (result.imageBytes != null) {
+        _galleryImageBytes = result.imageBytes;
         _selectedAvatar = null;
       }
     });
@@ -87,7 +87,7 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
   void _selectAvatar(ProfilePhotoAvatar avatar) {
     setState(() {
       _selectedAvatar = avatar;
-      _galleryImage = null;
+      _galleryImageBytes = null;
     });
     _photoAnim.forward(from: 0);
   }
@@ -115,7 +115,7 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
               phoneNumber: e164Phone,
               fullName: fullName,
               selectedAvatar: _selectedAvatar,
-              galleryImage: _galleryImage,
+              galleryImageBytes: _galleryImageBytes,
               role: 'household',
             ),
           ));
@@ -172,7 +172,7 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
                     submitting: _submitting,
                     phoneError: _phoneError,
                     selectedAvatar: _selectedAvatar,
-                    galleryImage: _galleryImage,
+                    galleryImageBytes: _galleryImageBytes,
                     photoAnim: _photoAnim,
                     onTapGallery: _openPhotoSheet,
                     onTapCamera: _openPhotoSheet,
@@ -309,7 +309,7 @@ class _FormCard extends StatelessWidget {
     required this.submitting,
     required this.phoneError,
     required this.selectedAvatar,
-    required this.galleryImage,
+    required this.galleryImageBytes,
     required this.photoAnim,
     required this.onTapGallery,
     required this.onTapCamera,
@@ -325,7 +325,7 @@ class _FormCard extends StatelessWidget {
   final bool submitting;
   final String? phoneError;
   final ProfilePhotoAvatar? selectedAvatar;
-  final File? galleryImage;
+  final Uint8List? galleryImageBytes;
   final AnimationController photoAnim;
   final VoidCallback onTapGallery;
   final VoidCallback onTapCamera;
@@ -452,11 +452,11 @@ class _FormCard extends StatelessWidget {
               ],
             ),
           ),
-          if (galleryImage != null) ...[
+          if (galleryImageBytes != null) ...[
             const SizedBox(height: 14),
             Center(
               child: ClipOval(
-                child: Image.file(galleryImage!,
+                child: Image.memory(galleryImageBytes!,
                     width: 64, height: 64, fit: BoxFit.cover),
               ),
             ),
@@ -661,8 +661,40 @@ class _PremiumAvatarCardState extends State<_PremiumAvatarCard>
                           borderRadius: BorderRadius.circular(16),
                           child: Hero(
                             tag: widget.heroTag,
-                            child: Image.asset(widget.assetPath,
-                                fit: BoxFit.cover),
+                            // These premium avatar source PNGs are large,
+                            // full-resolution exports (~1254px, ~2MB)
+                            // displayed inside a small card (roughly
+                            // 130-160dp here). Without cacheWidth/cacheHeight,
+                            // Image.asset decodes the full source resolution
+                            // on every build; on Android that oversized
+                            // decode can get pushed through a lower-quality
+                            // mip level under the engine's image-cache
+                            // memory pressure, which is what was showing up
+                            // as "washed out" avatars there (Flutter Web's
+                            // browser-native decode path doesn't hit the
+                            // same limit, which is why Chrome looked fine).
+                            // Bounding the decode to the actual on-screen
+                            // size (scaled for device pixel ratio) fixes
+                            // this without touching the Worker avatars,
+                            // which use much smaller source files and never
+                            // hit this path.
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final dpr = MediaQuery.of(context)
+                                    .devicePixelRatio;
+                                final decodeSize =
+                                    (constraints.maxWidth * dpr)
+                                        .round()
+                                        .clamp(1, 2000)
+                                        .toInt();
+                                return Image.asset(
+                                  widget.assetPath,
+                                  fit: BoxFit.cover,
+                                  cacheWidth: decodeSize,
+                                  cacheHeight: decodeSize,
+                                );
+                              },
+                            ),
                           ),
                         ),
                         AnimatedOpacity(

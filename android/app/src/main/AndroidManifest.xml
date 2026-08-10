@@ -35,6 +35,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Forces the Skia rendering backend instead of Impeller (Android's
+             default since Flutter 3.24). Impeller has known issues rendering
+             certain Image/ClipRRect/Stack compositions as visibly desaturated
+             on-device even though the same tree is pixel-correct on Flutter
+             Web (which never uses Impeller) — this is what was washing out
+             the Household Male/Female/Family avatar images on Android only.
+             Skia matches Web's output. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

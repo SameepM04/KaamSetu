@@ -1,11 +1,10 @@
-import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../config/dev_config.dart';
 import '../../widgets/profile_photo_sheet.dart';
+import '../imagekit_service.dart';
 import '../local_worker_session.dart';
 import '../session_service.dart';
 import 'auth_service.dart';
@@ -31,12 +30,11 @@ import 'auth_service.dart';
 ///         [LocalWorkerSession] whenever there's no signed-in Firebase
 ///         user — keep working completely unchanged.
 class FakeAuthService implements AuthService {
-  FakeAuthService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
-
-  final FirebaseFirestore _firestore;
+  FakeAuthService({ImageKitService? imageKit})
+      : _imageKit = imageKit ?? ImageKitService();
 
   static const String _fakeVerificationId = 'fake-otp-verification-id';
+  final ImageKitService _imageKit;
 
   @override
   String? get currentUserId => null;
@@ -70,7 +68,7 @@ class FakeAuthService implements AuthService {
     required String fullName,
     required String phoneNumber,
     ProfilePhotoAvatar? selectedAvatar,
-    File? galleryImage,
+    Uint8List? galleryImageBytes,
     String role = 'worker',
   }) async {
     if (smsCode != kFakeOtpCode) {
@@ -80,17 +78,7 @@ class FakeAuthService implements AuthService {
       );
     }
 
-    // Role-scoped fake uid + collection — mirrors FirebaseAuthService's
-    // `role == 'household' ? 'households' : 'workers'` split. Previously
-    // this was a single hardcoded 'fake-worker-kaamsetu' id shared by both
-    // roles, so a household sign-up and a worker sign-up would collide in
-    // [LocalWorkerSession]/[SessionService], and — because nothing was ever
-    // written to Firestore here — HouseholdRepository.profileStream()
-    // always found an empty `households/{uid}` doc and fell back to the
-    // demo household, no matter what name was actually entered at sign up.
-    final uid =
-        role == 'household' ? 'fake-household-kaamsetu' : 'fake-worker-kaamsetu';
-    final collection = role == 'household' ? 'households' : 'workers';
+    const uid = 'fake-worker-kaamsetu';
     final profile = <String, dynamic>{
       'uid': uid,
       'fullName': fullName,
@@ -100,8 +88,7 @@ class FakeAuthService implements AuthService {
       'profileCompleted': false,
     };
 
-    // Persist for the current run (Home/Profile read this immediately —
-    // don't wait on Firestore below, so sign-in is never blocked by it).
+    // Persist for the current run (Home/Profile read this).
     LocalWorkerSession.save(profile);
 
     // Persist across app restarts (Splash reads this to skip Login).
@@ -111,27 +98,6 @@ class FakeAuthService implements AuthService {
       phoneNumber: phoneNumber,
       avatar: selectedAvatar?.name,
       role: role,
-    );
-
-    // Best-effort mirror to Firestore so HouseholdRepository.profileStream()
-    // / WorkerAuthService.workerProfileStream() find a real document instead
-    // of falling back to demo data. Deliberately NOT awaited and wrapped in
-    // its own timeout + catch: Fake OTP mode exists specifically to work
-    // fully offline (see class doc — Spark plan has no billing, and network
-    // conditions during dev are unreliable), so sign-in must never hang or
-    // fail just because this write is slow, blocked by security rules, or
-    // unreachable. LocalWorkerSession/SessionService above are the source
-    // of truth the UI can always rely on; this is a nice-to-have on top.
-    unawaited(
-      _firestore.collection(collection).doc(uid).set({
-        ...profile,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)).timeout(const Duration(seconds: 8)).catchError(
-        (Object error, StackTrace _) {
-          // ignore: avoid_print
-          print('FakeAuthService: Firestore mirror write skipped — $error');
-        },
-      ),
     );
 
     // No real FirebaseAuth `User` exists in the Fake OTP flow; a `null`
@@ -148,7 +114,7 @@ class FakeAuthService implements AuthService {
     required String fullName,
     required String address,
     String? selectedAvatar,
-    File? newPhotoFile,
+    Uint8List? newPhotoBytes,
     required List<String> skills,
     required String experience,
     required List<String> preferredCategories,
@@ -173,14 +139,77 @@ class FakeAuthService implements AuthService {
       fields['selectedAvatar'] = selectedAvatar;
       fields['profilePhotoURL'] = null;
     }
-    // Note: newPhotoFile is ignored in fake mode (no Storage available).
 
+    String? uploadedPhotoUrl;
+    if (newPhotoBytes != null) {
+      // Uploads to ImageKit (not Firebase Storage — see
+      // `imagekit_service.dart` for why). This throws ImageKitException on
+      // failure; the caller (EditProfileScreen) already has a catch-all
+      // around this call that surfaces a real error and keeps the
+      // previously-saved photo, so we deliberately do NOT swallow it here.
+      uploadedPhotoUrl = await _imageKit.uploadProfilePhoto(
+        bytes: newPhotoBytes,
+        fileName: '${LocalWorkerSession.userId}.jpg',
+      );
+      fields['profilePhotoURL'] = uploadedPhotoUrl;
+      fields['selectedAvatar'] = null;
+    }
+
+    // Save in-memory for the current session.
     LocalWorkerSession.save(fields);
+
+    // Also persist ALL fields to SharedPreferences so edits survive an app restart.
+    await SessionService.saveSession(
+      uid: LocalWorkerSession.userId,
+      fullName: fullName,
+      phoneNumber: LocalWorkerSession.data['phoneNumber'] as String? ?? '',
+      avatar: selectedAvatar ?? LocalWorkerSession.data['selectedAvatar'] as String?,
+      role: LocalWorkerSession.data['role'] as String? ?? 'worker',
+      address: address,
+      skills: skills,
+      experience: experience,
+      preferredCategories: preferredCategories,
+      availability: availability,
+      workingRadius: workingRadius,
+      expectedDailyWage: expectedDailyWage,
+      languages: languages,
+      profilePhotoURL:
+          uploadedPhotoUrl ?? LocalWorkerSession.data['profilePhotoURL'] as String?,
+    );
   }
 
   @override
   Future<void> signOut() async {
     LocalWorkerSession.clear();
     await SessionService.clear();
+  }
+
+  /// Fake OTP / dev mode has no Firebase Storage available (Spark plan),
+  /// so this uploads to ImageKit instead (see `imagekit_service.dart`) and
+  /// persists the resulting URL to the in-memory session + SharedPreferences
+  /// (there is no `workers/{uid}` Firestore document to write to in fake
+  /// mode). On failure this rethrows [ImageKitException] — the caller
+  /// (`ProfileAvatarEditor`) already surfaces upload failures as a
+  /// friendly snackbar and keeps the previous avatar in place, never a
+  /// fabricated local path. Once the project is switched to real Firebase
+  /// (`kUseFakeOtp = false`), [FirebaseAuthService.updateProfilePhoto]
+  /// takes over unchanged.
+  @override
+  Future<void> updateProfilePhoto(Uint8List bytes) async {
+    final url = await _imageKit.uploadProfilePhoto(
+      bytes: bytes,
+      fileName: '${LocalWorkerSession.userId}.jpg',
+    );
+
+    LocalWorkerSession.save({'profilePhotoURL': url, 'selectedAvatar': null});
+
+    await SessionService.saveSession(
+      uid: LocalWorkerSession.userId,
+      fullName: LocalWorkerSession.data['fullName'] as String? ?? '',
+      phoneNumber: LocalWorkerSession.data['phoneNumber'] as String? ?? '',
+      avatar: null,
+      role: LocalWorkerSession.data['role'] as String? ?? 'worker',
+      profilePhotoURL: url,
+    );
   }
 }

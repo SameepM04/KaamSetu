@@ -1,10 +1,10 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../widgets/profile_photo_sheet.dart';
+import '../imagekit_service.dart';
 import 'auth_service.dart';
 
 /// Real Firebase Phone Authentication + Firestore worker-account creation.
@@ -17,14 +17,14 @@ class FirebaseAuthService implements AuthService {
   FirebaseAuthService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
-    FirebaseStorage? storage,
+    ImageKitService? imageKit,
   })  : _auth = auth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance,
-        _storage = storage ?? FirebaseStorage.instance;
+        _imageKit = imageKit ?? ImageKitService();
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final FirebaseStorage _storage;
+  final ImageKitService _imageKit;
 
   @override
   String? get currentUserId => _auth.currentUser?.uid;
@@ -85,7 +85,7 @@ class FirebaseAuthService implements AuthService {
     required String fullName,
     required String phoneNumber,
     ProfilePhotoAvatar? selectedAvatar,
-    File? galleryImage,
+    Uint8List? galleryImageBytes,
     String role = 'worker',
   }) async {
     final credential = PhoneAuthProvider.credential(
@@ -102,9 +102,9 @@ class FirebaseAuthService implements AuthService {
     final collection = role == 'household' ? 'households' : 'workers';
 
     String? profilePhotoUrl;
-    if (galleryImage != null) {
+    if (galleryImageBytes != null) {
       profilePhotoUrl = await _uploadProfilePhoto(
-          uid: user.uid, file: galleryImage, collection: collection);
+          uid: user.uid, bytes: galleryImageBytes, collection: collection);
     }
 
     await _firestore.collection(collection).doc(user.uid).set({
@@ -121,13 +121,20 @@ class FirebaseAuthService implements AuthService {
     return user;
   }
 
+  /// Uploads [bytes] to ImageKit (not Firebase Storage — see
+  /// `imagekit_service.dart` for why) and returns the public URL. Used by
+  /// both sign up and the profile-photo pencil/camera controls. Firebase
+  /// Storage is intentionally not used anywhere in this file; Firebase
+  /// here is only Auth + Firestore.
   Future<String> _uploadProfilePhoto(
       {required String uid,
-      required File file,
-      String collection = 'workers'}) async {
-    final ref = _storage.ref('$collection/$uid/profile.jpg');
-    await ref.putFile(file);
-    return ref.getDownloadURL();
+      required Uint8List bytes,
+      String collection = 'workers'}) {
+    return _imageKit.uploadProfilePhoto(
+      bytes: bytes,
+      fileName: '$uid.jpg',
+      folder: '/profile-photos/$collection',
+    );
   }
 
   /// Saves ALL editable worker-profile fields in a SINGLE Firestore write.
@@ -140,7 +147,7 @@ class FirebaseAuthService implements AuthService {
     required String fullName,
     required String address,
     String? selectedAvatar,
-    File? newPhotoFile,
+    Uint8List? newPhotoBytes,
     required List<String> skills,
     required String experience,
     required List<String> preferredCategories,
@@ -155,8 +162,8 @@ class FirebaseAuthService implements AuthService {
     // Upload photo first if a new file was picked (the URL is needed for
     // the document write below). Avatar strings don't need uploading.
     String? profilePhotoUrl;
-    if (newPhotoFile != null) {
-      profilePhotoUrl = await _uploadProfilePhoto(uid: uid, file: newPhotoFile);
+    if (newPhotoBytes != null) {
+      profilePhotoUrl = await _uploadProfilePhoto(uid: uid, bytes: newPhotoBytes);
     }
 
     // ONE Firestore document update — all fields merged in a single call.
@@ -195,5 +202,23 @@ class FirebaseAuthService implements AuthService {
   @override
   Future<void> signOut() async {
     await _auth.signOut();
+  }
+
+  /// Quick photo-only update for the profile avatar's pencil button.
+  /// Reuses [_uploadProfilePhoto] (same ImageKit path/mechanism as sign up
+  /// and [saveCompleteProfile]) and merges only the image fields so name,
+  /// skills, ratings, etc. are left untouched.
+  @override
+  Future<void> updateProfilePhoto(Uint8List bytes) async {
+    final uid = currentUserId;
+    if (uid == null) {
+      throw StateError('You need to be signed in to update your photo.');
+    }
+    final url = await _uploadProfilePhoto(uid: uid, bytes: bytes);
+    await _firestore.collection('workers').doc(uid).set({
+      'profilePhotoURL': url,
+      'selectedAvatar': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

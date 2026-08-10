@@ -5,6 +5,7 @@ import '../data/job_categories.dart';
 import '../data/job_filters.dart';
 import '../data/job_previews.dart';
 import '../repositories/jobs_repository.dart';
+import '../services/map_navigation_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/jobs/application_status_chip.dart';
 import 'saved_jobs_screen.dart';
@@ -368,19 +369,27 @@ class JobPreviewCard extends StatelessWidget {
     final resolvedHeroTag = heroTag ?? 'job-preview-${job.id}';
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap ??
             () => Navigator.of(context).push(
                   premiumPageRoute(
                       JobDetailsScreen(job: job, heroTag: resolvedHeroTag)),
                 ),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.line)),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.line.withValues(alpha: .7)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.navy.withValues(alpha: .04),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -402,43 +411,54 @@ class JobPreviewCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             color: AppColors.navy,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800)),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -.1)),
                     const SizedBox(height: 4),
                     Text(job.employer,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             color: AppColors.inkMuted,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 3),
-                    _MetaLine(
-                        icon: Icons.place_rounded,
-                        text: '${job.location} · ${job.distanceKm}'),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 5),
+                    _LocationMetaLine(job: job),
                     const SizedBox(height: 3),
                     _MetaLine(
                         icon: Icons.schedule_rounded, text: job.postedAgo),
                   ])),
               BookmarkButton(job: job),
             ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              _PayChip(pay: job.pay),
-              const Spacer(),
-              ValueListenableBuilder<Map<String, ApplicationEntry>>(
-                valueListenable: JobsRepository.instance.applications,
-                builder: (context, applications, _) {
-                  final status = applications[job.id]?.status;
-                  return status == null
-                      ? const SizedBox.shrink()
-                      : ApplicationStatusChip(status: status);
-                },
-              ),
-              if (actionLabel != null) const SizedBox(width: 4),
-              if (actionLabel != null)
-                TextButton(onPressed: onAction, child: Text(actionLabel!)),
-            ]),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _PayChip(pay: job.pay),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 8,
+                    children: [
+                      ValueListenableBuilder<Map<String, ApplicationEntry>>(
+                        valueListenable: JobsRepository.instance.applications,
+                        builder: (context, applications, _) {
+                          final status = applications[job.id]?.status;
+                          return status == null
+                              ? const SizedBox.shrink()
+                              : ApplicationStatusChip(status: status);
+                        },
+                      ),
+                      if (actionLabel != null)
+                        _ApplyPill(label: actionLabel!, onPressed: onAction),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             if (bottomContent != null) ...[
               const SizedBox(height: 8),
               bottomContent!,
@@ -450,6 +470,74 @@ class JobPreviewCard extends StatelessWidget {
   }
 }
 
+/// Compact primary-styled pill used for the card's trailing action (usually
+/// "Apply now"). Presentation only — the same [onPressed] callback the
+/// caller already passed as `onAction` is invoked unchanged; no new logic.
+class _ApplyPill extends StatelessWidget {
+  const _ApplyPill({required this.label, required this.onPressed});
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.blue,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text(label,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: .1)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Same look as [_MetaLine], but taps through to Google Maps directions
+/// when the job has a real destination. Kept as its own widget so the
+/// tappable behaviour doesn't leak into other [_MetaLine] uses (posted time,
+/// etc.) that shouldn't be interactive.
+class _LocationMetaLine extends StatelessWidget {
+  const _LocationMetaLine({required this.job});
+  final JobPreview job;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = '${job.location} · ${job.distanceKm}';
+    if (!job.hasNavigableLocation) {
+      return _MetaLine(icon: Icons.place_rounded, text: text);
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: () => MapNavigationService.openDirections(
+        context: context,
+        latitude: job.latitude,
+        longitude: job.longitude,
+        destinationName: job.location,
+      ),
+      child: Row(children: [
+        const Icon(Icons.place_rounded, color: AppColors.blue, size: 14),
+        const SizedBox(width: 4),
+        Expanded(
+            child: Text(text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: AppColors.inkMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500))),
+      ]),
+    );
+  }
+}
+
 class _MetaLine extends StatelessWidget {
   const _MetaLine({required this.icon, required this.text});
   final IconData icon;
@@ -457,15 +545,15 @@ class _MetaLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(children: [
-        Icon(icon, color: AppColors.inkMuted, size: 13),
-        const SizedBox(width: 3),
+        Icon(icon, color: AppColors.inkMuted, size: 14),
+        const SizedBox(width: 4),
         Expanded(
             child: Text(text,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                     color: AppColors.inkMuted,
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500))),
       ]);
 }
@@ -476,14 +564,14 @@ class _PayChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-            color: AppColors.green.withValues(alpha: .14),
+            color: AppColors.green.withValues(alpha: .12),
             borderRadius: BorderRadius.circular(9)),
         child: Text(pay,
             style: const TextStyle(
                 color: AppColors.green,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800)),
+                fontSize: 13,
+                fontWeight: FontWeight.w700)),
       );
 }

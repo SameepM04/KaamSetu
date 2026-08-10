@@ -5,10 +5,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
+import '../data/demo/demo_jobs.dart';
 import '../data/job_categories.dart';
 import '../data/job_previews.dart';
+import '../data/profile_completion.dart';
 import '../config/dev_config.dart';
+import '../repositories/demo_state.dart';
+import '../repositories/household_repository.dart';
 import '../services/local_worker_session.dart';
+import '../services/worker_auth_service.dart';
 
 /// Denormalized snapshot of a saved job, as stored at
 /// `users/{uid}/saved_jobs/{jobId}`. Carries only the metadata Task 2
@@ -79,6 +84,23 @@ class SavedJobEntry {
         pay: salary,
         categoryOverride: JobCategoryMapper.fromStorage(category),
       );
+}
+
+/// Thrown by [JobsRepository.applyForJob] when the worker's profile is not
+/// 100% complete. Carries the actual percentage (0-99) so the UI can show
+/// it in the existing-style "Complete your profile" dialog without a
+/// second read. This is a repository-level gate — it fires before any
+/// duplicate-check or Firestore write, so no caller (button state, screen,
+/// or future entry point) can bypass it by skipping a UI-only check.
+class ProfileIncompleteException implements Exception {
+  const ProfileIncompleteException(this.completionPercent);
+
+  /// 0-99 — always < 100, since 100% never throws.
+  final int completionPercent;
+
+  @override
+  String toString() =>
+      'ProfileIncompleteException($completionPercent% complete)';
 }
 
 /// Owns every Firestore read/write for job data. Job listings themselves
@@ -309,6 +331,7 @@ class JobsRepository {
     _jobsSub?.cancel();
     _savedIdsSub?.cancel();
     _applicationsSub?.cancel();
+    _demoApplicationsSub?.cancel();
     _savedJobsController.close();
     _applicationsController.close();
   }
@@ -372,7 +395,16 @@ class JobsRepository {
         await saveJob(job);
       }
     } catch (e) {
-      // Rollback on failure.
+      if (DemoRepositoryState.isFallbackError(e)) {
+        // Demo fallback (req. #5/#6/#19) — Firestore rejected the write
+        // (typically permission-denied under Fake-OTP mode), but the
+        // optimistic state set above is exactly what the bookmark should
+        // look like, so keep it instead of rolling back. It already
+        // survives navigation/tab-switch/rebuild because it lives in this
+        // repository's ValueNotifier, not local widget state.
+        return;
+      }
+      // A genuine failure — rollback so the icon doesn't lie about state.
       final rollback = {...savedJobIds.value};
       if (wasSaved) {
         rollback.add(job.id);
@@ -412,16 +444,74 @@ class JobsRepository {
     _applicationsListeningUid = uid;
     applications.value = {};
     applicationsLoaded.value = false;
+    var lastFirestoreEntries = <ApplicationEntry>[];
+    var firestoreOk = false;
+
+    void emit() {
+      var entries = firestoreOk ? lastFirestoreEntries : <ApplicationEntry>[];
+      // Hackathon-demo fallback (mirrors HouseholdRepository.myJobsStream)
+      // — only kicks in while this worker has no real completed
+      // application yet, so the Applications tab and the "Rate Household"
+      // flow are demoable out of the box with no manual Firestore seeding.
+      if (!entries.any((e) => e.status == ApplicationStatus.completed)) {
+        entries = [...entries, ...kDemoCompletedApplications];
+      }
+      // Demo-mode applications (req. #3/#4/#15) — applications created via
+      // JobsRepository.applyForJob()'s fallback, or whose status was
+      // updated via HouseholdRepository.updateApplication()'s fallback,
+      // live in the shared DemoRepositoryState instead of Firestore. They
+      // never duplicate a real Firestore entry for the same jobId.
+      final knownJobIds = entries.map((e) => e.jobId).toSet();
+      final demoEntries = DemoRepositoryState.instance
+          .applicationsForWorker(uid)
+          .where((r) => !knownJobIds.contains(r.jobId))
+          .map(_applicationEntryFromDemo);
+      entries = [...entries, ...demoEntries];
+      applications.value = {for (final entry in entries) entry.jobId: entry};
+      applicationsLoaded.value = true;
+      _applicationsController.add(entries);
+    }
+
     _applicationsSub = _applicationsCol(uid)
         .orderBy('appliedAt', descending: true)
         .snapshots()
         .listen((snapshot) {
-      final entries = snapshot.docs.map(ApplicationEntry.fromDoc).toList();
-      applications.value = {for (final entry in entries) entry.jobId: entry};
-      applicationsLoaded.value = true;
-      _applicationsController.add(entries);
-    }, onError: _applicationsController.addError);
+      lastFirestoreEntries = snapshot.docs.map(ApplicationEntry.fromDoc).toList();
+      firestoreOk = true;
+      emit();
+    }, onError: (_) {
+      firestoreOk = false;
+      emit();
+    });
+    _demoApplicationsSub?.cancel();
+    _demoApplicationsSub =
+        DemoRepositoryState.instance.changes.listen((_) => emit());
   }
+
+  StreamSubscription<void>? _demoApplicationsSub;
+
+  ApplicationEntry _applicationEntryFromDemo(DemoApplicationRecord r) =>
+      ApplicationEntry(
+        jobId: r.jobId,
+        title: r.title,
+        category: r.category,
+        company: r.company,
+        salary: r.salary,
+        location: r.location,
+        appliedAt: r.appliedAt,
+        status: ApplicationStatusMapper.fromStorage(r.status),
+        hasKnownStatus: true,
+        jobType: r.jobType,
+        distance: r.distance,
+        acceptedAt: r.acceptedAt,
+        completedAt: r.completedAt,
+        rejectedAt: r.rejectedAt,
+        withdrawnAt: r.withdrawnAt,
+        workerRating: r.workerRating,
+        workerReview: r.workerReview,
+        workerThumbUp: r.workerThumbUp,
+        workerRatedAt: r.workerRatedAt,
+      );
 
   bool isAppliedSync(String jobId) => applications.value.containsKey(jobId);
 
@@ -440,29 +530,96 @@ class JobsRepository {
 
   /// Creates the sole document for this job. The transaction prevents a
   /// duplicate application from another device or after an app restart.
+  ///
+  /// Enforces the 100%-profile-completion gate first (see
+  /// [ProfileIncompleteException]) — this is the actual apply action, not
+  /// a UI-only check, so a worker below 100% can never create an
+  /// application here regardless of which screen/button called this.
   Future<bool> applyForJob(JobPreview job) async {
     final uid = _uid();
     if (uid == null) return false;
-    final ref = _applicationsCol(uid).doc(job.id);
-    var created = false;
-    await _firestore.runTransaction((transaction) async {
-      final current = await transaction.get(ref);
-      if (current.exists) return;
-      transaction.set(ref, {
-        'jobId': job.id,
-        'title': job.title,
-        'category': JobCategoryMapper.filterValue(job.category),
-        'company': job.employer,
-        'salary': job.pay,
-        'location': job.location,
-        'appliedAt': FieldValue.serverTimestamp(),
-        'status': ApplicationStatus.pending.name,
-        'jobType': JobTypeMapper.displayName(job.jobType),
-        'distance': job.distanceKm,
+
+    final completion = await _currentProfileCompletion(uid);
+    if (completion < 1.0) {
+      throw ProfileIncompleteException((completion * 100).round());
+    }
+
+    // Already applied in demo mode — never create a duplicate (req. #23).
+    if (DemoRepositoryState.instance.existingApplication(job.id, uid) !=
+        null) {
+      return false;
+    }
+    try {
+      final ref = _applicationsCol(uid).doc(job.id);
+      var created = false;
+      await _firestore.runTransaction((transaction) async {
+        final current = await transaction.get(ref);
+        if (current.exists) return;
+        transaction.set(ref, {
+          'jobId': job.id,
+          // Explicit canonical worker id, alongside the doc's own
+          // `users/{workerId}/applications/{jobId}` path — gives the
+          // Household's application query a direct field to read instead
+          // of relying solely on path structure (req. #2/#3/#11).
+          'workerId': uid,
+          'title': job.title,
+          'category': JobCategoryMapper.filterValue(job.category),
+          'company': job.employer,
+          'salary': job.pay,
+          'location': job.location,
+          'appliedAt': FieldValue.serverTimestamp(),
+          'status': ApplicationStatus.pending.name,
+          'jobType': JobTypeMapper.displayName(job.jobType),
+          'distance': job.distanceKm,
+        });
+        created = true;
       });
-      created = true;
-    });
-    return created;
+      return created;
+    } catch (e) {
+      if (!DemoRepositoryState.isFallbackError(e)) rethrow;
+      // Demo fallback (req. #2/#3/#4/#15) — the transaction above is what
+      // was throwing "You don't have permission to access...". Create the
+      // single shared application record locally instead so both this
+      // worker's Applications tab and the household's Applications-for-
+      // this-job view pick it up immediately (both read through
+      // DemoRepositoryState — see ensureApplicationsListening() and
+      // HouseholdRepository.applicationsForJobStream()).
+      DemoRepositoryState.instance.applyForJob(
+        jobId: job.id,
+        workerId: uid,
+        title: job.title,
+        category: JobCategoryMapper.filterValue(job.category),
+        company: job.employer,
+        salary: job.pay,
+        location: job.location,
+        jobType: JobTypeMapper.displayName(job.jobType),
+        distance: job.distanceKm,
+      );
+      return true;
+    }
+  }
+
+  /// Resolves the worker's current profile completion (0.0-1.0) from the
+  /// same sources the Worker Profile screen itself reads — never a second
+  /// calculation. Fake-OTP dev mode reads the synchronous
+  /// [LocalWorkerSession] snapshot (there's no Firestore user to stream
+  /// from); real accounts await the first emission of
+  /// [WorkerAuthService.workerProfileStream], which also naturally waits
+  /// out an in-flight load rather than judging against stale/empty data
+  /// (edge case: "profile data is still loading — do not accidentally
+  /// allow the application").
+  Future<double> _currentProfileCompletion(String uid) async {
+    if (kUseFakeOtp) {
+      return ProfileCompletion.compute(LocalWorkerSession.data);
+    }
+    try {
+      final data = await WorkerAuthService().workerProfileStream(uid).first;
+      return ProfileCompletion.compute(data);
+    } catch (_) {
+      // Profile couldn't be resolved — treat as incomplete rather than
+      // silently letting an application through.
+      return 0;
+    }
   }
 
   Future<void> removeApplication(String jobId) async {
@@ -484,25 +641,48 @@ class JobsRepository {
     if (uid == null) {
       throw StateError('Not signed in.');
     }
-    final ref = _applicationsCol(uid).doc(jobId);
-    await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(ref);
-      if (!snapshot.exists) {
-        throw StateError('This application no longer exists.');
-      }
-      final current = ApplicationEntry.fromDoc(snapshot);
-      if (current.status == ApplicationStatus.withdrawn) {
+    final demoRecord = DemoRepositoryState.instance.existingApplication(
+        jobId, uid);
+    if (demoRecord != null) {
+      // A demo-mode application never reached Firestore in the first
+      // place, so withdraw it the same way it was created.
+      if (demoRecord.status == 'withdrawn') {
         throw StateError('This application has already been withdrawn.');
       }
-      if (!current.canWithdraw) {
-        throw StateError(
-            'This application can no longer be withdrawn.');
+      if (demoRecord.status != 'pending') {
+        throw StateError('This application can no longer be withdrawn.');
       }
-      transaction.update(ref, {
-        'status': ApplicationStatus.withdrawn.name,
-        'withdrawnAt': FieldValue.serverTimestamp(),
+      DemoRepositoryState.instance
+          .updateApplicationStatus(jobId, uid, 'withdrawn');
+      return;
+    }
+    final ref = _applicationsCol(uid).doc(jobId);
+    try {
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(ref);
+        if (!snapshot.exists) {
+          throw StateError('This application no longer exists.');
+        }
+        final current = ApplicationEntry.fromDoc(snapshot);
+        if (current.status == ApplicationStatus.withdrawn) {
+          throw StateError('This application has already been withdrawn.');
+        }
+        if (!current.canWithdraw) {
+          throw StateError(
+              'This application can no longer be withdrawn.');
+        }
+        transaction.update(ref, {
+          'status': ApplicationStatus.withdrawn.name,
+          'withdrawnAt': FieldValue.serverTimestamp(),
+        });
       });
-    });
+    } catch (e) {
+      if (e is StateError || !DemoRepositoryState.isFallbackError(e)) {
+        rethrow;
+      }
+      DemoRepositoryState.instance
+          .updateApplicationStatus(jobId, uid, 'withdrawn');
+    }
   }
 
   /// Task 3C/5 — pure derivation of the four-step timeline from an
@@ -555,6 +735,12 @@ class JobsRepository {
     final completedDone =
         entry.completedAt != null || entry.status == ApplicationStatus.completed;
 
+    // Only Applied / Employer Viewed / Accepted are shown as timeline
+    // steps — completion is already communicated once via the
+    // "Completed" ApplicationStatusChip, so a trailing "Completed" step
+    // here would duplicate that same information in the UI.
+    // `completedDone`/`entry.completedAt` remain read elsewhere (e.g. the
+    // rating section) — only this display step is omitted.
     return [
       TimelineStepData(
           label: 'Applied',
@@ -567,12 +753,9 @@ class JobsRepository {
           timestamp: entry.viewedAt),
       TimelineStepData(
           label: 'Accepted',
-          state: stateFor(acceptedDone, !acceptedDone && viewedDone),
+          state: stateFor(
+              acceptedDone || completedDone, !acceptedDone && viewedDone),
           timestamp: entry.acceptedAt),
-      TimelineStepData(
-          label: 'Completed',
-          state: stateFor(completedDone, !completedDone && acceptedDone),
-          timestamp: entry.completedAt),
     ];
   }
 
@@ -582,6 +765,99 @@ class JobsRepository {
     _applicationsSub = null;
     _applicationsListeningUid = null;
     await ensureApplicationsListening();
+  }
+
+  /// Submits the worker's rating of the household for a completed job.
+  ///
+  /// Keeps the shared `jobs/{jobId}` document in sync via the existing
+  /// [HouseholdRepository.rateJob] write (reused rather than duplicated —
+  /// it already knows how to backfill a demo-only job into a real,
+  /// correctly-statused document). Also denormalizes the same fields onto
+  /// this worker's own `users/{uid}/applications/{jobId}` doc via
+  /// `set(merge: true)` so the Applications tab can show "already rated"
+  /// without an extra read — and, for a demo entry that doesn't exist in
+  /// Firestore yet, backfills the full doc (not just the rating) so it
+  /// reads back as a complete, correctly-statused application rather than
+  /// a sparse rating-only patch.
+  Future<void> rateHousehold({
+    required ApplicationEntry entry,
+    required double rating,
+    bool? thumbUp,
+    String review = '',
+  }) async {
+    final uid = _uid();
+    if (uid == null) {
+      throw StateError('Not signed in.');
+    }
+    // HouseholdRepository.rateJob() already has its own demo fallback, so
+    // the shared `jobs/{jobId}` document is safe either way.
+    await HouseholdRepository.instance.rateJob(
+      job: HouseholdJob(
+        id: entry.jobId,
+        title: entry.title,
+        category: entry.category,
+        status: 'completed',
+        budget: entry.salary,
+        location: entry.location,
+        postedAt: entry.appliedAt ?? DateTime.now(),
+        applicants: 0,
+      ),
+      rating: rating,
+      thumbUp: thumbUp,
+      review: review,
+      isHouseholdRating: false,
+    );
+    try {
+      await _applicationsCol(uid).doc(entry.jobId).set({
+        'jobId': entry.jobId,
+        'title': entry.title,
+        'category': entry.category,
+        'company': entry.company,
+        'salary': entry.salary,
+        'location': entry.location,
+        'status': ApplicationStatus.completed.name,
+        'jobType': entry.jobType,
+        'distance': entry.distance,
+        if (entry.appliedAt != null)
+          'appliedAt': Timestamp.fromDate(entry.appliedAt!),
+        if (entry.completedAt != null)
+          'completedAt': Timestamp.fromDate(entry.completedAt!),
+        'workerRating': rating,
+        'workerReview': review,
+        if (thumbUp != null) 'workerThumbUp': thumbUp,
+        'workerRatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      if (!DemoRepositoryState.isFallbackError(e)) rethrow;
+      // Demo fallback (req. #2/#7/#8) — this denormalized write is what
+      // let the Applications tab show "already rated" without an extra
+      // read; the shared demo state now serves that same purpose. Also
+      // registers/updates the shared application record so a demo-only
+      // application (created via applyForJob()'s fallback, or one of the
+      // bundled kDemoCompletedApplications that never had a real Firestore
+      // doc) still ends up "Rated" after this call.
+      if (DemoRepositoryState.instance.existingApplication(entry.jobId, uid) ==
+          null) {
+        DemoRepositoryState.instance.applyForJob(
+          jobId: entry.jobId,
+          workerId: uid,
+          title: entry.title,
+          category: entry.category,
+          company: entry.company,
+          salary: entry.salary,
+          location: entry.location,
+          jobType: entry.jobType,
+          distance: entry.distance,
+        );
+      }
+      DemoRepositoryState.instance.rateFromWorker(
+        entry.jobId,
+        uid,
+        rating: rating,
+        review: review,
+        thumbUp: thumbUp,
+      );
+    }
   }
 
   /// A broadcast of the single cached query, not a separate Firestore read.
@@ -672,6 +948,10 @@ class ApplicationEntry {
     this.completedAt,
     this.rejectedAt,
     this.withdrawnAt,
+    this.workerRating,
+    this.workerReview,
+    this.workerThumbUp,
+    this.workerRatedAt,
   });
 
   final String jobId;
@@ -695,6 +975,37 @@ class ApplicationEntry {
   final DateTime? rejectedAt;
   final DateTime? withdrawnAt;
 
+  // Worker's rating of the household for a completed job — denormalized
+  // onto this application doc by JobsRepository.rateHousehold() so the
+  // Applications tab can show "already rated" without an extra read.
+  final double? workerRating;
+  final String? workerReview;
+  final bool? workerThumbUp;
+  final DateTime? workerRatedAt;
+
+  bool get isRatedByWorker => workerRating != null && workerRating! > 0;
+
+  /// True for the small set of canned, always-present demo applications
+  /// (`kDemoCompletedApplications` — jobId prefix `demo_job_completed_`)
+  /// that `JobsRepository` injects purely so the Applications tab/rating
+  /// flow are demoable before the worker has any real completed job of
+  /// their own. These were never actually applied for by this worker, so
+  /// the Worker Home dashboard counters/earnings must exclude them (see
+  /// KaamSetu "make dashboard data-driven" spec, section 40) — every
+  /// other entry (including ones created via the demo-mode Firestore
+  /// fallback in `applyForJob`/`updateApplicationStatus`) represents a
+  /// real action the worker actually took and stays counted.
+  bool get isSampleDemoEntry => jobId.startsWith('demo_job_completed_');
+
+  /// Daily pay parsed out of [salary] (e.g. "₹1,500" / "₹1,500/day" ->
+  /// 1500). Reuses the exact same parsing approach as
+  /// `JobPreview.salaryValue` — the canonical amount already stored on
+  /// every application — rather than introducing a second amount field.
+  int get salaryValue => int.tryParse(
+          (RegExp(r'[\d,]+').firstMatch(salary)?.group(0) ?? '0')
+              .replaceAll(',', '')) ??
+      0;
+
   factory ApplicationEntry.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return ApplicationEntry(
@@ -715,6 +1026,10 @@ class ApplicationEntry {
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       rejectedAt: (data['rejectedAt'] as Timestamp?)?.toDate(),
       withdrawnAt: (data['withdrawnAt'] as Timestamp?)?.toDate(),
+      workerRating: (data['workerRating'] as num?)?.toDouble(),
+      workerReview: data['workerReview'] as String?,
+      workerThumbUp: data['workerThumbUp'] as bool?,
+      workerRatedAt: (data['workerRatedAt'] as Timestamp?)?.toDate(),
     );
   }
 

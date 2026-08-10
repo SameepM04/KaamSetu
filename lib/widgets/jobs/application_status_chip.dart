@@ -47,7 +47,7 @@ class ApplicationStatusChip extends StatelessWidget {
       avatar: Icon(icon, size: 15, color: color),
       label: Text(ApplicationStatusMapper.displayName(status)),
       labelStyle:
-          TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w800),
+          TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
       backgroundColor: background,
       side: BorderSide.none,
       visualDensity: VisualDensity.compact,

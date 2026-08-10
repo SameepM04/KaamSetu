@@ -2,13 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../animations/page_transition.dart';
 import '../data/job_categories.dart';
 import '../data/job_previews.dart';
 import '../repositories/jobs_repository.dart';
+import '../services/map_navigation_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/home/category_icon.dart';
 import '../widgets/jobs/application_status_chip.dart';
 import '../widgets/jobs/bookmark_button.dart';
+import 'worker_profile_screen.dart';
 
 /// Full job view shared by every job listing surface.
 class JobDetailsScreen extends StatefulWidget {
@@ -57,6 +60,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       _showMessage(created
           ? 'Application sent successfully.'
           : 'You have already applied for this job.');
+    } on ProfileIncompleteException catch (error) {
+      if (!mounted) return;
+      await _showProfileIncompleteDialog(error.completionPercent);
     } on FirebaseException catch (error) {
       if (!mounted) return;
       _showMessage(_firestoreMessage(error));
@@ -66,6 +72,34 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       if (mounted) setState(() => _submitting = false);
     }
   }
+
+  /// Existing-style dialog for the strict, repository-enforced
+  /// profile-completion gate (see `JobsRepository.applyForJob` /
+  /// `ProfileIncompleteException`) — shown when the worker is below 100%
+  /// complete, instead of creating an application.
+  Future<void> _showProfileIncompleteDialog(int percent) => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Complete your profile to apply'),
+          content: Text(
+              'Your profile is $percent% complete. Please complete your '
+              'profile before applying for jobs.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(this.context)
+                    .push(premiumPageRoute(const WorkerProfileScreen()));
+              },
+              child: const Text('Complete Profile'),
+            ),
+          ],
+        ),
+      );
 
   String _firestoreMessage(FirebaseException error) => switch (error.code) {
         'permission-denied' =>
@@ -339,8 +373,10 @@ class _DetailsGrid extends StatelessWidget {
             for (final item in items)
               SizedBox(
                   width: width,
-                  child:
-                      _InfoTile(icon: item.$1, value: item.$2, label: item.$3))
+                  child: item.$3 == 'Location' && job.hasNavigableLocation
+                      ? _LocationInfoTile(job: job, value: item.$2)
+                      : _InfoTile(
+                          icon: item.$1, value: item.$2, label: item.$3))
           ]);
         },
       );
@@ -381,6 +417,62 @@ class _InfoTile extends StatelessWidget {
                         fontWeight: FontWeight.w800)),
               ])),
         ]),
+      );
+}
+
+/// Same shape as [_InfoTile] for the "Location" slot, but tappable —
+/// opens Google Maps directions to the job and shows a small
+/// "Tap to open in Maps" hint instead of the usual label.
+class _LocationInfoTile extends StatelessWidget {
+  const _LocationInfoTile({required this.job, required this.value});
+  final JobPreview job;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => MapNavigationService.openDirections(
+            context: context,
+            latitude: job.latitude,
+            longitude: job.longitude,
+            destinationName: job.location,
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.line)),
+            child: Row(children: [
+              const Icon(Icons.place_rounded, color: AppColors.blue, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(value,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: AppColors.navy,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text('Tap to open in Maps',
+                          style: TextStyle(
+                              color: AppColors.blue,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600)),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppColors.blue, size: 14),
+                    ]),
+                  ])),
+            ]),
+          ),
+        ),
       );
 }
 

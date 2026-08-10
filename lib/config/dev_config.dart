@@ -22,3 +22,37 @@ const bool kUseFakeOtp = true;
 
 /// The only OTP code accepted by the Fake OTP flow.
 const String kFakeOtpCode = '123456';
+
+/// ------------------------------------------------------------------------
+/// IMAGEKIT — profile-photo storage
+/// ------------------------------------------------------------------------
+/// Profile photos are uploaded to ImageKit instead of Firebase Storage,
+/// specifically because Firebase Storage requires the paid Blaze plan
+/// (see the Spark-plan note above) — ImageKit does not. Everything else
+/// (Auth, Firestore, jobs, applications, ratings) still goes through
+/// Firebase unchanged.
+///
+/// [kImageKitPublicKey] and [kImageKitUrlEndpoint] are safe to ship in the
+/// client — copy them from your ImageKit dashboard ("Developer options").
+///
+/// [kImageKitAuthEndpoint] must point at a server endpoint that returns
+/// `{"token": ..., "expire": ..., "signature": ...}` for a new upload.
+/// ImageKit's PRIVATE key signs that payload, so it must be generated on a
+/// server you control — e.g. a Firebase Cloud Function such as:
+///
+///   exports.imagekitAuth = functions.https.onRequest((req, res) => {
+///     const imagekit = new ImageKit({
+///       publicKey: '...',
+///       privateKey: functions.config().imagekit.private_key, // never client-side
+///       urlEndpoint: '...',
+///     });
+///     res.set('Access-Control-Allow-Origin', '*'); // needed for Flutter Web
+///     res.json(imagekit.getAuthenticationParameters());
+///   });
+///
+/// Until all three constants below are filled in, profile-photo uploads
+/// fail with a clear `ImageKitException` (see `imagekit_service.dart`)
+/// rather than silently pretending to succeed.
+const String kImageKitPublicKey = '';
+const String kImageKitUrlEndpoint = '';
+const String kImageKitAuthEndpoint = '';

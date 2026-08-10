@@ -51,6 +51,8 @@ class JobPreview {
     this.status = 'open',
     this.categoryOverride,
     this.postedAt,
+    this.latitude,
+    this.longitude,
   });
 
   /// Stable, explicit identifier — never derived from title/employer/
@@ -74,6 +76,16 @@ class JobPreview {
   final String status;
   final JobCategory? categoryOverride;
   final DateTime? postedAt;
+
+  /// Destination coordinates for "open in Google Maps" directions (see
+  /// MapNavigationService). Optional — only present where known, never
+  /// invented. When null, the location text still displays as-is but the
+  /// row does not offer map navigation.
+  final double? latitude;
+  final double? longitude;
+
+  /// True when this job has a real destination to hand to Google Maps.
+  bool get hasNavigableLocation => latitude != null && longitude != null;
 
   JobCategory get category =>
       categoryOverride ?? JobCategoryMapper.fromJobTitle(title) ?? JobCategory.cleaning;
@@ -117,6 +129,9 @@ const kJobPreviews = <JobPreview>[
       title: 'House Painting',
       employer: 'Sharma Family',
       location: 'Kothrud, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.5074,
+      longitude: 73.8077,
       distanceKm: '1.2 km',
       postedAgo: '2 hours ago',
       pay: '₹1,500 / day',
@@ -129,6 +144,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Bathroom Plumbing',
       employer: 'Patil Family',
       location: 'Erandwane, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.5089,
+      longitude: 73.8237,
       distanceKm: '1.8 km',
       postedAgo: '3 hours ago',
       pay: '₹1,200 / day',
@@ -141,6 +159,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Tube Light Installation',
       employer: 'Joshi Residence',
       location: 'Karve Nagar, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.489,
+      longitude: 73.808,
       distanceKm: '2.1 km',
       postedAgo: '5 hours ago',
       pay: '₹800 / day',
@@ -153,6 +174,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Home Cleaning',
       employer: 'Kulkarni Household',
       location: 'Baner, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.559,
+      longitude: 73.7868,
       distanceKm: '1.4 km',
       postedAgo: 'Today',
       pay: '₹900 / day',
@@ -165,6 +189,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Sofa Cleaning',
       employer: 'Kulkarni Household',
       location: 'Aundh, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.5643,
+      longitude: 73.8077,
       distanceKm: '2.3 km',
       postedAgo: 'Today',
       pay: '₹1,100 / day',
@@ -177,6 +204,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Switch Board Repair',
       employer: 'Joshi Residence',
       location: 'Pashan, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.537,
+      longitude: 73.797,
       distanceKm: '3.2 km',
       postedAgo: 'Today',
       pay: '₹700 / day',
@@ -189,6 +219,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Garden Maintenance',
       employer: 'Rao Family',
       location: 'Wakad, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.598,
+      longitude: 73.761,
       distanceKm: '2.8 km',
       postedAgo: 'Yesterday',
       pay: '₹950 / day',
@@ -201,6 +234,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Carpentry',
       employer: 'Iyer Household',
       location: 'Deccan, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.5158,
+      longitude: 73.8412,
       distanceKm: '3.7 km',
       postedAgo: 'Yesterday',
       pay: '₹1,300 / day',
@@ -213,6 +249,9 @@ const kJobPreviews = <JobPreview>[
       title: 'AC Repair',
       employer: 'Gupta Family',
       location: 'Shivajinagar, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.5308,
+      longitude: 73.8475,
       distanceKm: '4.1 km',
       postedAgo: 'Yesterday',
       pay: '₹1,000 / day',
@@ -225,6 +264,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Delivery',
       employer: 'Khan Residence',
       location: 'Viman Nagar, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.5679,
+      longitude: 73.9143,
       distanceKm: '4.8 km',
       postedAgo: 'Yesterday',
       pay: '₹850 / day',
@@ -237,6 +279,9 @@ const kJobPreviews = <JobPreview>[
       title: 'Cook',
       employer: 'Mehta Family',
       location: 'Koregaon Park, Pune',
+      // Approximate neighborhood-center coordinates (demo data only).
+      latitude: 18.5362,
+      longitude: 73.8938,
       distanceKm: '5.2 km',
       postedAgo: '2 days ago',
       pay: '₹1,400 / day',

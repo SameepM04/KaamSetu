@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -16,25 +17,51 @@ enum ProfilePhotoAvatar {
 }
 
 /// Result of the profile-photo bottom sheet: either a preset avatar or a
-/// picked image file. Both null means the user cancelled / kept default.
+/// picked image. Both null means the user cancelled / kept default.
+///
+/// [imageBytes] is used for BOTH preview and upload, on every platform —
+/// `XFile.readAsBytes()` works identically on Web, Android and iOS, unlike
+/// `dart:io.File`, which does not exist on Flutter Web and is what
+/// previously caused a red assertion screen when running in the browser.
+/// [imagePath] is only meaningful on non-web platforms (a real filesystem
+/// path) and is kept solely so mobile-only tools such as `image_cropper`
+/// can still be used there; it is always null on Web.
 class ProfilePhotoSelection {
-  const ProfilePhotoSelection({this.avatar, this.imageFile});
+  const ProfilePhotoSelection({this.avatar, this.imageBytes, this.imagePath});
 
   final ProfilePhotoAvatar? avatar;
-  final File? imageFile;
+  final Uint8List? imageBytes;
+  final String? imagePath;
 }
 
-Future<ProfilePhotoSelection?> showProfilePhotoSheet(BuildContext context) {
+/// Shows the photo-selection sheet.
+///
+/// [allowAvatarSelection] controls whether the Male/Female preset-avatar
+/// options are offered alongside Gallery/Camera. Sign-up flows
+/// (`WorkerSignUpScreen`, `HouseholdSignUpScreen`) want the full picker —
+/// choosing an avatar is a legitimate first-time choice there. The Home
+/// and Profile pencil/camera buttons (`ProfileAvatarEditor`,
+/// `EditProfileScreen`) are specifically "change my *photo*" affordances,
+/// so they pass `false` and only ever see Gallery + Take Photo — avatar
+/// selection stays a separate, explicit feature (see KaamSetu profile-photo
+/// spec, "DO NOT break existing avatar system").
+Future<ProfilePhotoSelection?> showProfilePhotoSheet(
+  BuildContext context, {
+  bool allowAvatarSelection = true,
+}) {
   return showModalBottomSheet<ProfilePhotoSelection>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => const _ProfilePhotoSheet(),
+    builder: (_) =>
+        _ProfilePhotoSheet(allowAvatarSelection: allowAvatarSelection),
   );
 }
 
 class _ProfilePhotoSheet extends StatefulWidget {
-  const _ProfilePhotoSheet();
+  const _ProfilePhotoSheet({this.allowAvatarSelection = true});
+
+  final bool allowAvatarSelection;
 
   @override
   State<_ProfilePhotoSheet> createState() => _ProfilePhotoSheetState();
@@ -54,8 +81,15 @@ class _ProfilePhotoSheetState extends State<_ProfilePhotoSheet> {
         imageQuality: 90,
       );
       if (file != null && mounted) {
-        Navigator.of(context)
-            .pop(ProfilePhotoSelection(imageFile: File(file.path)));
+        // readAsBytes() is Web-safe (reads the picked Blob) as well as
+        // native-safe (reads the picked file) — this is what makes the
+        // rest of the photo pipeline (preview, crop, upload) work on both.
+        final bytes = await file.readAsBytes();
+        if (!mounted) return;
+        Navigator.of(context).pop(ProfilePhotoSelection(
+          imageBytes: bytes,
+          imagePath: kIsWeb ? null : file.path,
+        ));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -98,26 +132,28 @@ class _ProfilePhotoSheetState extends State<_ProfilePhotoSheet> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: _AvatarOption(
-                    label: 'Male Avatar',
-                    assetPath: 'assets/avatars/male_avatar.png',
-                    onTap: () => Navigator.of(context).pop(
-                        const ProfilePhotoSelection(
-                            avatar: ProfilePhotoAvatar.male)),
+                if (widget.allowAvatarSelection) ...[
+                  Expanded(
+                    child: _AvatarOption(
+                      label: 'Male Avatar',
+                      assetPath: 'assets/avatars/male_avatar.png',
+                      onTap: () => Navigator.of(context).pop(
+                          const ProfilePhotoSelection(
+                              avatar: ProfilePhotoAvatar.male)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _AvatarOption(
-                    label: 'Female Avatar',
-                    assetPath: 'assets/avatars/female_avatar.png',
-                    onTap: () => Navigator.of(context).pop(
-                        const ProfilePhotoSelection(
-                            avatar: ProfilePhotoAvatar.female)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _AvatarOption(
+                      label: 'Female Avatar',
+                      assetPath: 'assets/avatars/female_avatar.png',
+                      onTap: () => Navigator.of(context).pop(
+                          const ProfilePhotoSelection(
+                              avatar: ProfilePhotoAvatar.female)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   child: _ActionOption(
                     icon: Icons.image_rounded,
