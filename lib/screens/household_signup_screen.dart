@@ -183,8 +183,8 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
                   Center(
                     child: RichText(
                       text: TextSpan(
-                        style: const TextStyle(
-                            color: AppColors.inkMuted, fontSize: 14.5),
+                        style: TextStyle(
+                            color: AppColors.hint(context), fontSize: 14.5),
                         children: [
                           const TextSpan(text: 'Already have an account? '),
                           TextSpan(
@@ -203,13 +203,13 @@ class _HouseholdSignUpScreenState extends State<HouseholdSignUpScreen>
                   Center(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
+                      children: [
                         Icon(Icons.verified_user_rounded,
                             color: AppColors.blue, size: 15),
                         SizedBox(width: 6),
                         Text('Your information is safe and secure with us.',
                             style: TextStyle(
-                                color: AppColors.inkMuted, fontSize: 12.5)),
+                                color: AppColors.hint(context), fontSize: 12.5)),
                       ],
                     ),
                   ),
@@ -231,7 +231,7 @@ class _BackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AppColors.surface(context),
       shape: const CircleBorder(),
       elevation: 2,
       shadowColor: const Color(0x224775B4),
@@ -263,9 +263,9 @@ class _HeaderRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Welcome!',
+                Text('Welcome!',
                     style: TextStyle(
-                        color: AppColors.navy,
+                        color: AppColors.label(context),
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -.5)),
@@ -277,10 +277,10 @@ class _HeaderRow extends StatelessWidget {
                         height: 1.08,
                         letterSpacing: -.5)),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   'Join KaamSetu and hire trusted local\nworkers for your daily needs.',
                   style: TextStyle(
-                      color: AppColors.inkMuted, fontSize: 13.5, height: 1.4),
+                      color: AppColors.hint(context), fontSize: 13.5, height: 1.4),
                 ),
               ],
             ),
@@ -340,7 +340,7 @@ class _FormCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(28),
         boxShadow: const [
           BoxShadow(
@@ -350,17 +350,17 @@ class _FormCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Center(
+          Center(
             child: Text('Choose Your Profile',
                 style: TextStyle(
-                    color: AppColors.navy,
+                    color: AppColors.label(context),
                     fontSize: 18,
                     fontWeight: FontWeight.w800)),
           ),
           const SizedBox(height: 4),
-          const Center(
+          Center(
             child: Text('Pick a premium avatar or upload your own photo',
-                style: TextStyle(color: AppColors.inkMuted, fontSize: 13)),
+                style: TextStyle(color: AppColors.hint(context), fontSize: 13)),
           ),
           const SizedBox(height: 18),
           ScaleTransition(
@@ -417,13 +417,13 @@ class _FormCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Row(children: const [
+                Row(children: [
                   Expanded(child: Divider(color: AppColors.line)),
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 10),
                     child: Text('OR',
                         style: TextStyle(
-                            color: AppColors.inkMuted,
+                            color: AppColors.hint(context),
                             fontSize: 11,
                             fontWeight: FontWeight.w700)),
                   ),
@@ -462,9 +462,9 @@ class _FormCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 22),
-          const Text('Full Name',
+          Text('Full Name',
               style: TextStyle(
-                  color: AppColors.navy,
+                  color: AppColors.label(context),
                   fontSize: 14.5,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
@@ -476,9 +476,9 @@ class _FormCard extends StatelessWidget {
                 nameTouched && !isNameValid ? 'Full name is required' : null,
           ),
           const SizedBox(height: 16),
-          const Text('Mobile Number',
+          Text('Mobile Number',
               style: TextStyle(
-                  color: AppColors.navy,
+                  color: AppColors.label(context),
                   fontSize: 14.5,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
@@ -491,7 +491,7 @@ class _FormCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Icon(Icons.verified_user_rounded,
                   color: AppColors.blue, size: 16),
               SizedBox(width: 8),
@@ -499,7 +499,7 @@ class _FormCard extends StatelessWidget {
                 child: Text(
                   'We will send a 6-digit OTP to verify your number.',
                   style: TextStyle(
-                      color: AppColors.inkMuted, fontSize: 12.5, height: 1.35),
+                      color: AppColors.hint(context), fontSize: 12.5, height: 1.35),
                 ),
               ),
             ],
@@ -537,8 +537,8 @@ class _DashedTile extends StatelessWidget {
               const SizedBox(height: 8),
               Text(label,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: AppColors.navy,
+                  style: TextStyle(
+                      color: AppColors.label(context),
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
                       height: 1.2)),
@@ -632,7 +632,7 @@ class _PremiumAvatarCardState extends State<_PremiumAvatarCard>
       child: ScaleTransition(
         scale: _scale,
         child: Material(
-          color: Colors.white,
+          color: AppColors.surface(context),
           borderRadius: BorderRadius.circular(20),
           elevation: widget.selected ? 6 : 3,
           shadowColor: const Color(0x334775F0),
@@ -645,7 +645,7 @@ class _PremiumAvatarCardState extends State<_PremiumAvatarCard>
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: widget.selected ? AppColors.blue : AppColors.line,
+                  color: widget.selected ? AppColors.blue : AppColors.border(context),
                   width: widget.selected ? 2.4 : 1.2,
                 ),
               ),
@@ -709,7 +709,7 @@ class _PremiumAvatarCardState extends State<_PremiumAvatarCard>
                                 color: AppColors.blue,
                                 shape: BoxShape.circle,
                                 border:
-                                    Border.all(color: Colors.white, width: 2),
+                                    Border.all(color: AppColors.surface(context), width: 2),
                                 boxShadow: const [
                                   BoxShadow(
                                       color: Color(0x554775F0),
@@ -717,8 +717,8 @@ class _PremiumAvatarCardState extends State<_PremiumAvatarCard>
                                       offset: Offset(0, 2)),
                                 ],
                               ),
-                              child: const Icon(Icons.check_rounded,
-                                  color: Colors.white, size: 14),
+                              child: Icon(Icons.check_rounded,
+                                  color: AppColors.surface(context), size: 14),
                             ),
                           ),
                         ),
@@ -730,7 +730,7 @@ class _PremiumAvatarCardState extends State<_PremiumAvatarCard>
                       style: TextStyle(
                           color: widget.selected
                               ? AppColors.blue
-                              : AppColors.navy,
+                              : AppColors.label(context),
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700)),
                 ],
@@ -762,27 +762,27 @@ class _AppTextField extends StatelessWidget {
       children: [
         TextField(
           controller: controller,
-          style: const TextStyle(
-              color: AppColors.navy, fontSize: 15, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              color: AppColors.label(context), fontSize: 15, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(
-                color: AppColors.inkMuted, fontWeight: FontWeight.w400),
+            hintStyle: TextStyle(
+                color: AppColors.hint(context), fontWeight: FontWeight.w400),
             prefixIcon: Icon(icon, color: AppColors.blue, size: 20),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: AppColors.surface(context),
             contentPadding:
                 const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide:
-                    const BorderSide(color: AppColors.line, width: 1.4)),
+                    BorderSide(color: AppColors.border(context), width: 1.4)),
             enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(
                     color: errorText != null
                         ? Colors.red.shade300
-                        : AppColors.line,
+                        : AppColors.border(context),
                     width: 1.4)),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -825,12 +825,12 @@ class _PhoneField extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: borderColor, width: 1.4),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('+91',
                       style: TextStyle(
-                          color: AppColors.navy,
+                          color: AppColors.label(context),
                           fontWeight: FontWeight.w700,
                           fontSize: 15)),
                   SizedBox(width: 4),
@@ -850,20 +850,20 @@ class _PhoneField extends StatelessWidget {
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(10)
                   ],
-                  style: const TextStyle(
-                      color: AppColors.navy,
+                  style: TextStyle(
+                      color: AppColors.label(context),
                       fontSize: 15,
                       fontWeight: FontWeight.w600),
                   decoration: InputDecoration(
                     hintText: 'Enter your mobile number',
-                    hintStyle: const TextStyle(
-                        color: AppColors.inkMuted,
+                    hintStyle: TextStyle(
+                        color: AppColors.hint(context),
                         fontWeight: FontWeight.w400,
                         fontSize: 13.5),
                     prefixIcon: const Icon(Icons.call_outlined,
                         color: AppColors.blue, size: 18),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: AppColors.surface(context),
                     contentPadding:
                         const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
                     border: OutlineInputBorder(
@@ -957,27 +957,27 @@ class _CreateAccountButtonState extends State<_CreateAccountButton>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.submitting)
-                const SizedBox(
+                SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
                       strokeWidth: 2.4,
-                      valueColor: AlwaysStoppedAnimation(Colors.white)),
+                      valueColor: AlwaysStoppedAnimation(AppColors.surface(context))),
                 )
               else ...[
                 Text('Create Account',
                     style: TextStyle(
                         color:
-                            widget.enabled ? Colors.white : AppColors.inkMuted,
+                            widget.enabled ? AppColors.surface(context) : AppColors.hint(context),
                         fontSize: 16,
                         fontWeight: FontWeight.w800)),
                 const SizedBox(width: 10),
                 CircleAvatar(
                   radius: 12,
                   backgroundColor:
-                      Colors.white.withValues(alpha: widget.enabled ? .25 : 0),
+                      AppColors.surface(context).withValues(alpha: widget.enabled ? .25 : 0),
                   child: Icon(Icons.arrow_forward_rounded,
-                      color: widget.enabled ? Colors.white : AppColors.inkMuted,
+                      color: widget.enabled ? AppColors.surface(context) : AppColors.inkMuted,
                       size: 15),
                 ),
               ],
