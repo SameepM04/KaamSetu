@@ -805,6 +805,7 @@ class WorkerProfile {
     this.availability = const [],
     this.distance = 0,
     this.verified = false,
+    this.experienceYears,
   });
   final String id, name;
   final String? photoUrl, avatar;
@@ -812,6 +813,11 @@ class WorkerProfile {
   final int wage, reviews, completedJobs;
   final double rating, distance;
   final bool verified;
+
+  /// Raw experience bucket the worker selected on their profile (e.g.
+  /// '1–3 Years'). See `ExperienceTierMapper` in `data/worker_filters.dart`
+  /// for how the Household filter turns this into a comparable rank.
+  final String? experienceYears;
   factory WorkerProfile.fromMap(
     Map<String, dynamic> map, {
     required String id,
@@ -825,6 +831,7 @@ class WorkerProfile {
         categories: _strings(map['preferredCategories']),
         languages: _strings(map['languagesKnown']),
         availability: _strings(map['availability']),
+        experienceYears: map['experienceYears'] as String?,
         wage: (map['expectedDailyWage'] as num?)?.toInt() ?? 0,
         rating: (map['averageRating'] as num?)?.toDouble() ??
             (map['rating'] as num?)?.toDouble() ??

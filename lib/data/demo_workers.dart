@@ -31,6 +31,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 1.2,
     availability: ['Weekdays', 'Morning Shift'],
     verified: true,
+    experienceYears: '1–3 Years',
   ),
   WorkerProfile(
     id: 'demo_w02',
@@ -46,6 +47,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 0.8,
     availability: ['Full Week', 'Morning Shift'],
     verified: true,
+    experienceYears: '5–10 Years',
   ),
   WorkerProfile(
     id: 'demo_w03',
@@ -61,6 +63,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 2.1,
     availability: ['Weekdays', 'Weekends'],
     verified: true,
+    experienceYears: '3–5 Years',
   ),
   WorkerProfile(
     id: 'demo_w04',
@@ -76,6 +79,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 1.5,
     availability: ['Morning Shift', 'Weekdays'],
     verified: true,
+    experienceYears: 'Less than 1 year',
   ),
   WorkerProfile(
     id: 'demo_w05',
@@ -91,6 +95,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 3.0,
     availability: ['Weekdays'],
     verified: false,
+    experienceYears: '1–3 Years',
   ),
   WorkerProfile(
     id: 'demo_w06',
@@ -106,6 +111,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 1.9,
     availability: ['Full Week', 'Morning Shift'],
     verified: false,
+    experienceYears: 'Fresher',
   ),
   WorkerProfile(
     id: 'demo_w07',
@@ -121,6 +127,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 2.5,
     availability: ['Weekdays', 'Morning Shift'],
     verified: true,
+    experienceYears: '5–10 Years',
   ),
   WorkerProfile(
     id: 'demo_w08',
@@ -136,6 +143,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 0.5,
     availability: ['Full Week'],
     verified: true,
+    experienceYears: '3–5 Years',
   ),
   WorkerProfile(
     id: 'demo_w09',
@@ -151,6 +159,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 3.8,
     availability: ['Weekdays', 'Weekends'],
     verified: false,
+    experienceYears: '1–3 Years',
   ),
   WorkerProfile(
     id: 'demo_w10',
@@ -166,6 +175,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 2.8,
     availability: ['Weekdays', 'Morning Shift'],
     verified: true,
+    experienceYears: '10+ Years',
   ),
   WorkerProfile(
     id: 'demo_w11',
@@ -181,6 +191,7 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 4.5,
     availability: ['Full Week', 'Weekends'],
     verified: false,
+    experienceYears: 'Fresher',
   ),
   WorkerProfile(
     id: 'demo_w12',
@@ -196,5 +207,6 @@ const kDemoWorkers = <WorkerProfile>[
     distance: 1.7,
     availability: ['Weekdays', 'Morning Shift'],
     verified: true,
+    experienceYears: '3–5 Years',
   ),
 ];

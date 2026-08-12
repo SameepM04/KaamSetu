@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../data/demo_workers.dart';
 import '../data/job_categories.dart';
-import '../data/job_filters.dart';
+import '../data/worker_filters.dart';
 import '../repositories/household_repository.dart';
 import '../services/worker_auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/home/category_icon.dart';
 import '../widgets/home/profile_avatar_editor.dart';
-import '../widgets/jobs/job_filter_sheet.dart';
+import '../widgets/household/worker_filter_sheet.dart';
 import '../widgets/success_dialog.dart';
 import 'all_categories_screen.dart';
 import 'job_summary_screen.dart';
@@ -347,7 +347,7 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
   final _search = TextEditingController();
   Timer? _debounce;
   String _query = '';
-  JobFilters _filters = const JobFilters();
+  WorkerFilters _filters = const WorkerFilters();
   @override
   void dispose() {
     _debounce?.cancel();
@@ -363,16 +363,9 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
   }
 
   Future<void> _openFilters() async {
-    final result =
-        await showJobFilterSheet(context, _filters, forWorkers: true);
+    final result = await showWorkerFilterSheet(context, _filters);
     if (result != null && mounted) {
-      setState(() {
-        _filters = result;
-        if (result.category != null) {
-          _search.text = JobCategoryMapper.displayName(result.category!);
-          _query = _search.text.toLowerCase();
-        }
-      });
+      setState(() => _filters = result);
     }
   }
 
@@ -392,47 +385,10 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
   }
 
   /// Applies the current [_filters] and text [_query] to the worker list.
-  List<WorkerProfile> _applyFilters(List<WorkerProfile> all) {
-    return all.where((worker) {
-      // Text search
-      if (_query.isNotEmpty) {
-        final haystack =
-            '${worker.name} ${worker.skills.join(' ')} ${worker.categories.join(' ')}'
-                .toLowerCase();
-        if (!haystack.contains(_query)) return false;
-      }
-      // Category filter
-      if (_filters.category != null) {
-        final filterCat =
-            JobCategoryMapper.filterValue(_filters.category!).toLowerCase();
-        if (!worker.categories
-            .any((c) => c.toLowerCase() == filterCat)) {
-          return false;
-        }
-      }
-      // Salary range (wage)
-      if (worker.wage < _filters.salaryRange.$1 ||
-          worker.wage > _filters.salaryRange.$2) {
-        return false;
-      }
-      // Distance
-      if (worker.distance > _filters.maxDistance) return false;
-      // Nearby only
-      if (_filters.nearbyOnly && worker.distance > 3) return false;
-      // Verified only
-      if (_filters.verifiedOnly && !worker.verified) return false;
-      // Availability — worker must offer at least one selected slot
-      if (_filters.availability.isNotEmpty &&
-          !worker.availability.any((a) => _filters.availability.contains(a))) {
-        return false;
-      }
-      // Minimum rating
-      if (_filters.minRating > 0 && worker.rating < _filters.minRating) {
-        return false;
-      }
-      return true;
-    }).toList();
-  }
+  /// Delegates to [WorkerFilterEngine] so the dashboard search and
+  /// [RecommendedWorkersScreen] filter identically.
+  List<WorkerProfile> _applyFilters(List<WorkerProfile> all) =>
+      WorkerFilterEngine.apply(all, query: _query, filters: _filters);
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -546,7 +502,7 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
                                   TextButton.icon(
                                     onPressed: () {
                                       setState(() {
-                                        _filters = const JobFilters();
+                                        _filters = const WorkerFilters();
                                         if (_query.isEmpty) _search.clear();
                                       });
                                     },
