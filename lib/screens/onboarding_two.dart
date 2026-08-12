@@ -35,6 +35,12 @@ class _OnboardingTwoState extends State<OnboardingTwo>
   late final AnimationController _entry;
   late final Animation<double> _entryCurve;
 
+  // One-shot handshake settle once the hands connect: a subtle
+  // down / up / down / return-to-center wobble (600ms, easeInOut per spec).
+  // Value is -1..1 and is only ever non-zero right after completion.
+  late final AnimationController _handshake;
+  late final Animation<double> _handshakeCurve;
+
   // Resting hand separation once the entrance has settled (matches the
   // reference image); the drag gesture pushes this from .16 up to ~.92.
   double _restProgress = .16;
@@ -52,14 +58,24 @@ class _OnboardingTwoState extends State<OnboardingTwo>
         vsync: this, duration: const Duration(milliseconds: 500))
       ..forward();
     _entryCurve = CurvedAnimation(parent: _entry, curve: Curves.easeOutCubic);
+    _handshake = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
+    _handshakeCurve = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: -.8), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -.8, end: .3), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: .3, end: 0.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _handshake, curve: Curves.easeInOut));
   }
 
   void _completeSequence() {
     setState(() => _restProgress = .9);
     _handshakeTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) setState(() => _restProgress = 1);
+      if (!mounted) return;
+      setState(() => _restProgress = 1);
+      _handshake.forward(from: 0);
     });
-    _navigationTimer = Timer(const Duration(milliseconds: 800), () {
+    _navigationTimer = Timer(const Duration(milliseconds: 1300), () {
       if (mounted) {
         Navigator.of(context)
             .pushReplacement(premiumPageRoute(const OnboardingThree()));
@@ -71,6 +87,7 @@ class _OnboardingTwoState extends State<OnboardingTwo>
   void dispose() {
     _ambient.dispose();
     _entry.dispose();
+    _handshake.dispose();
     _handshakeTimer?.cancel();
     _navigationTimer?.cancel();
     super.dispose();
@@ -145,10 +162,12 @@ class _OnboardingTwoState extends State<OnboardingTwo>
                   ),
                   Expanded(
                     child: AnimatedBuilder(
-                      animation: Listenable.merge([_ambient, _entryCurve]),
+                      animation:
+                          Listenable.merge([_ambient, _entryCurve, _handshake]),
                       builder: (_, __) => HandsStage(
                         progress: _restProgress * _entryCurve.value,
                         ambient: _ambient.value,
+                        handshakeBounce: _handshakeCurve.value,
                       ),
                     ),
                   ),

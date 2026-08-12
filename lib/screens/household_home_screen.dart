@@ -1891,14 +1891,23 @@ class HouseholdProfileScreen extends StatelessWidget {
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
                 children: [
-                  const Text(
-                    'Profile',
-                    style: TextStyle(
-                      color: AppColors.navy,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -.4,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Profile',
+                        style: TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -.4,
+                        ),
+                      ),
+                      _EditProfileButton(
+                        currentName: hasName ? p.name : '',
+                        currentAddress: hasAddress ? p.address : '',
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 18),
                   Container(
@@ -2014,6 +2023,225 @@ class HouseholdProfileScreen extends StatelessWidget {
                 ],
               );
             },
+          ),
+        ),
+      );
+}
+
+class _EditProfileButton extends StatelessWidget {
+  const _EditProfileButton({
+    required this.currentName,
+    required this.currentAddress,
+  });
+
+  final String currentName;
+  final String currentAddress;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.white,
+        shape: const CircleBorder(side: BorderSide(color: AppColors.line)),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => _EditHouseholdProfileSheet(
+              initialName: currentName,
+              initialAddress: currentAddress,
+            ),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(9),
+            child: Icon(Icons.edit_rounded, color: AppColors.blue, size: 18),
+          ),
+        ),
+      );
+}
+
+/// Bottom sheet for editing the household's name/address — the only two
+/// fields this task asks to make editable. Reuses [HouseholdRepository]'s
+/// `households/{uid}` document via [HouseholdRepository.updateHouseholdProfile]
+/// (same source `profileStream()` reads from), so Household Home's greeting
+/// and this Profile screen update from the exact same write, no separate
+/// state to keep in sync.
+class _EditHouseholdProfileSheet extends StatefulWidget {
+  const _EditHouseholdProfileSheet({
+    required this.initialName,
+    required this.initialAddress,
+  });
+
+  final String initialName;
+  final String initialAddress;
+
+  @override
+  State<_EditHouseholdProfileSheet> createState() =>
+      _EditHouseholdProfileSheetState();
+}
+
+class _EditHouseholdProfileSheetState
+    extends State<_EditHouseholdProfileSheet> {
+  late final _nameCtrl = TextEditingController(text: widget.initialName);
+  late final _addressCtrl = TextEditingController(text: widget.initialAddress);
+
+  bool _saving = false;
+  String? _nameError;
+  String? _addressError;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _addressCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    final address = _addressCtrl.text.trim();
+
+    setState(() {
+      _nameError = name.isEmpty
+          ? 'Name is required'
+          : (name.length > 60 ? 'Name is too long' : null);
+      _addressError = address.isEmpty
+          ? 'Address is required'
+          : (address.length > 160 ? 'Address is too long' : null);
+    });
+    if (_nameError != null || _addressError != null) return;
+
+    setState(() => _saving = true);
+    try {
+      await HouseholdRepository.instance.updateHouseholdProfile(
+        name: name,
+        address: address,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      await SuccessDialog.show(context, title: 'Profile updated');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Could not save changes. Please try again.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: SafeArea(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.line,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Edit Profile',
+                  style: TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text('Name',
+                    style: TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  style: const TextStyle(
+                      color: AppColors.navy, fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    hintText: 'Enter your name',
+                    filled: true,
+                    fillColor: AppColors.mist,
+                    errorText: _nameError,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Address',
+                    style: TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _addressCtrl,
+                  maxLines: 2,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: const TextStyle(
+                      color: AppColors.navy, fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    hintText: 'Enter your address',
+                    filled: true,
+                    fillColor: AppColors.mist,
+                    errorText: _addressError,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _saving ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                valueColor:
+                                    AlwaysStoppedAnimation(Colors.white)),
+                          )
+                        : const Text('Save Changes',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );

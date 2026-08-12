@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../config/dev_config.dart';
@@ -21,23 +24,86 @@ import 'auth_service.dart';
 ///     Any other value throws a [FirebaseAuthException] with code
 ///     `invalid-verification-code`, which the existing OTP screen already
 ///     knows how to display as "Incorrect OTP. Please try again."
-///   * On success, no Firebase Auth user exists (there's nothing to sign
-///     in to), so the entered profile fields are persisted two ways:
+///   * On success, this signs in with Firebase Anonymous Authentication
+///     (see [_ensureFirebaseUid]) so `FirebaseAuth.instance.currentUser` is
+///     real and Firestore reads/writes that require `request.auth != null`
+///     work. The resulting real uid is then persisted two ways, keyed by
+///     that uid rather than a hardcoded fake id:
 ///       - [SessionService] (SharedPreferences) so `isLoggedIn` survives an
 ///         app restart.
 ///       - [LocalWorkerSession] (in-memory) so the existing Worker Home /
-///         Worker Profile screens — which already fall back to
-///         [LocalWorkerSession] whenever there's no signed-in Firebase
-///         user — keep working completely unchanged.
+///         Worker Profile screens, which read from [LocalWorkerSession],
+///         keep working completely unchanged.
 class FakeAuthService implements AuthService {
-  FakeAuthService({ImageKitService? imageKit})
-      : _imageKit = imageKit ?? ImageKitService();
+  FakeAuthService({ImageKitService? imageKit, FirebaseAuth? auth})
+      : _imageKit = imageKit ?? ImageKitService(),
+        _auth = auth ?? FirebaseAuth.instance;
 
   static const String _fakeVerificationId = 'fake-otp-verification-id';
   final ImageKitService _imageKit;
+  final FirebaseAuth _auth;
 
   @override
-  String? get currentUserId => null;
+  String? get currentUserId => _auth.currentUser?.uid;
+
+  /// Ensures there is a signed-in Firebase user and returns its uid.
+  ///
+  /// The Fake OTP flow never had a real Firebase Auth user before, so
+  /// every Firestore rule requiring `request.auth != null` failed and
+  /// repositories silently fell back to [DemoRepositoryState]. This signs
+  /// in anonymously (once per session) so `FirebaseAuth.instance.currentUser`
+  /// is real, while the OTP UI/UX (still gated behind [kFakeOtpCode])
+  /// stays completely unchanged.
+  Future<String> _ensureFirebaseUid() async {
+    var user = _auth.currentUser;
+    if (user == null) {
+      try {
+        // Bounded so a stuck/slow network call can never leave the OTP
+        // screen's spinner running forever — it surfaces as a normal
+        // exception instead, which the OTP screen's existing try/catch
+        // already resets `_verifying` for. This is the fix for the
+        // Household-signup regression: nothing here previously reset the
+        // spinner if this Future simply never completed.
+        final credential = await _auth
+            .signInAnonymously()
+            .timeout(const Duration(seconds: 12));
+        user = credential.user;
+      } on FirebaseAuthException catch (e, st) {
+        // Log the exact exception rather than swallowing it — per Firebase
+        // Console, this is what fires with code `admin-restricted-operation`
+        // / `operation-not-allowed` if Anonymous Authentication is disabled
+        // for this project (Firebase Console → Authentication → Sign-in
+        // method → Anonymous → Enable).
+        debugPrint('signInAnonymously() failed: ${e.code} — ${e.message}');
+        debugPrint('$st');
+        rethrow;
+      } on TimeoutException catch (_, st) {
+        debugPrint('signInAnonymously() timed out after 12s');
+        debugPrint('$st');
+        throw FirebaseAuthException(
+          code: 'anonymous-sign-in-timeout',
+          message:
+              'Could not reach Firebase. Please check your connection and try again.',
+        );
+      }
+    }
+
+    if (user == null) {
+      // Should not happen — signInAnonymously() either throws or returns a
+      // user — but fail loudly rather than silently reverting to a fake id.
+      throw FirebaseAuthException(
+        code: 'anonymous-sign-in-failed',
+        message: 'Could not establish a Firebase session for Fake OTP.',
+      );
+    }
+
+    // TEMP (for testing only — not shown anywhere in the UI): confirm we
+    // now hold a real Firebase UID instead of the old hardcoded fake one.
+    debugPrint('Firebase Auth anonymous sign-in successful');
+    debugPrint('UID: ${user.uid}');
+
+    return user.uid;
+  }
 
   @override
   Stream<Map<String, dynamic>> workerProfileStream(String uid) =>
@@ -78,7 +144,57 @@ class FakeAuthService implements AuthService {
       );
     }
 
-    const uid = 'fake-worker-kaamsetu';
+    // Fake OTP still stands in for real Phone Auth (Spark plan has no
+    // billing, so Phone Auth is unavailable) — but the resulting session
+    // now gets a *real* Firebase identity via Anonymous Auth, so Firestore
+    // reads/writes (which require `request.auth != null`) work instead of
+    // silently falling back to DemoRepositoryState.
+    final uid = await _ensureFirebaseUid();
+
+    // Root cause of the household Profile screen showing a hardcoded demo
+    // name: this Fake-OTP flow previously never wrote a `households/{uid}`
+    // Firestore document at all (only [FirebaseAuthService] — the real
+    // Phone Auth path — did), so `HouseholdRepository.profileStream()`
+    // always read back an empty doc and fell back to
+    // `kDemoHouseholdProfile`. Now that Fake OTP has a real (anonymous)
+    // Firebase uid, mirror [FirebaseAuthService.verifyOtpAndCreateWorker]
+    // and write the same initial document to the same collection the real
+    // flow uses — no new/duplicate collection, no change to the Worker
+    // path (worker profile in Fake-OTP mode still reads from
+    // [LocalWorkerSession], unchanged).
+    if (role == 'household') {
+      try {
+        // Also bounded (see [_ensureFirebaseUid]) — this write is new as of
+        // the Household-profile fix, and an unbounded Firestore call here
+        // was the actual Household-signup regression: it's wrapped in
+        // try/catch already, but try/catch cannot unblock a Future that
+        // never completes (e.g. Firestore rules not yet updated for
+        // anonymous auth causing the request to hang rather than reject
+        // quickly). The timeout guarantees this always resolves.
+        await FirebaseFirestore.instance
+            .collection('households')
+            .doc(uid)
+            .set({
+          'uid': uid,
+          'fullName': fullName,
+          'phoneNumber': phoneNumber,
+          'selectedAvatar': selectedAvatar?.name,
+          'role': role,
+          'profileCompleted': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).timeout(const Duration(seconds: 12));
+      } catch (e, st) {
+        // Don't block sign up on a Firestore write failure (e.g. rules not
+        // yet updated for anonymous auth, or PERMISSION_DENIED) —
+        // LocalWorkerSession/SessionService below still let the household
+        // use the app, same as before this Firestore write existed;
+        // HouseholdRepository.profileStream()'s existing
+        // kDemoHouseholdProfile fallback covers the rest.
+        debugPrint('households/$uid initial profile write failed: $e');
+        debugPrint('$st');
+      }
+    }
+
     final profile = <String, dynamic>{
       'uid': uid,
       'fullName': fullName,
@@ -182,6 +298,12 @@ class FakeAuthService implements AuthService {
   Future<void> signOut() async {
     LocalWorkerSession.clear();
     await SessionService.clear();
+    // Also end the anonymous Firebase session so the next Fake OTP login
+    // (possibly a different role/person on the same device) gets a fresh
+    // uid instead of reusing this one.
+    if (_auth.currentUser != null) {
+      await _auth.signOut();
+    }
   }
 
   /// Fake OTP / dev mode has no Firebase Storage available (Spark plan),

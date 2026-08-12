@@ -11,6 +11,9 @@ import '../theme/app_colors.dart';
 import '../widgets/home/category_icon.dart';
 import '../widgets/jobs/application_status_chip.dart';
 import '../widgets/jobs/bookmark_button.dart';
+import '../widgets/jobs/application_success_dialog.dart';
+import '../widgets/jobs/first_application_dialog.dart';
+import 'applications_screen.dart';
 import 'worker_profile_screen.dart';
 
 /// Full job view shared by every job listing surface.
@@ -34,6 +37,29 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     _repo.ensureApplicationsListening();
   }
 
+  /// Entry point for the Apply button. Order is intentionally strict:
+  /// 1) the existing 100%-profile-completion gate, 2) the Phase 2
+  /// first-application check — never the other way around, so the
+  /// motivational popup can never appear only for a profile-incomplete
+  /// dialog to interrupt it a moment later.
+  Future<void> _onApplyPressed() async {
+    if (_submitting) return;
+    final percent = await _repo.currentProfileCompletionPercent();
+    if (!mounted) return;
+    if (percent < 100) {
+      await _showProfileIncompleteDialog(percent);
+      return;
+    }
+    if (_repo.isFirstApplication) {
+      final apply = await FirstApplicationDialog.show(context);
+      if (apply == true) await _submitApplication();
+      return;
+    }
+    await _confirmApply();
+  }
+
+  /// Existing-style plain confirmation, used for every application after
+  /// the worker's first.
   Future<void> _confirmApply() async {
     final approved = await showDialog<bool>(
       context: context,
@@ -52,14 +78,29 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         ],
       ),
     );
-    if (approved != true || _submitting) return;
+    if (approved == true) await _submitApplication();
+  }
+
+  /// The single existing submission path — called by both the normal
+  /// confirm dialog and the Phase 2 motivational popup's "Apply now". The
+  /// repository still owns the actual profile gate, duplicate-application
+  /// protection, and Firestore write; nothing here or in either dialog
+  /// duplicates that logic.
+  Future<void> _submitApplication() async {
+    if (_submitting) return;
     setState(() => _submitting = true);
     try {
       final created = await _repo.applyForJob(widget.job);
       if (!mounted) return;
-      _showMessage(created
-          ? 'Application sent successfully.'
-          : 'You have already applied for this job.');
+      if (created) {
+        // Real Firestore success only — `applyForJob` returns `false` for
+        // an already-existing/duplicate application (see its demo-mode and
+        // transaction paths), so the success Lottie can never appear for a
+        // duplicate or a failed write, only a genuinely new document.
+        await _showApplicationSuccess();
+      } else {
+        _showMessage('You have already applied for this job.');
+      }
     } on ProfileIncompleteException catch (error) {
       if (!mounted) return;
       await _showProfileIncompleteDialog(error.completionPercent);
@@ -113,6 +154,33 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
+
+  /// Phase 3 — the success Lottie + "Application Sent!" dialog, shown only
+  /// after `_repo.applyForJob` has actually returned `true` (a confirmed
+  /// new Firestore document, not a duplicate). `_repo.applications` is
+  /// already updated by this point (the repository's own listener/local
+  /// state is what the transaction/demo-fallback writes into), so the
+  /// bottom bar's "Applied" state and the Applications tab both reflect
+  /// the new application as soon as this dialog appears.
+  Future<void> _showApplicationSuccess() async {
+    final viewApplications = await ApplicationSuccessDialog.show(
+      context,
+      jobTitle: widget.job.title,
+    );
+    if (!mounted) return;
+    if (viewApplications == true) {
+      // Return to the Worker Home shell, then present the Applications
+      // tab as a normal pushed screen on top of it — reuses the existing
+      // ApplicationsScreen rather than inventing a second applications
+      // list, and "Browse jobs" from there just pops back here.
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).push(premiumPageRoute(
+        ApplicationsScreen(
+          onBrowseJobs: () => Navigator.of(context).pop(),
+        ),
+      ));
+    }
+  }
 
   void _contactEmployer() => _showMessage(
       'Contact details will be shared after your application is reviewed.');
@@ -228,7 +296,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
               child: SizedBox(
                 height: 52,
                 child: FilledButton.icon(
-                  onPressed: applied || _submitting ? null : _confirmApply,
+                  onPressed: applied || _submitting ? null : _onApplyPressed,
                   icon:
                       Icon(applied ? Icons.check_rounded : Icons.send_rounded),
                   label: Text(_submitting

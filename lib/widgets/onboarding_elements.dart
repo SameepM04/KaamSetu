@@ -126,36 +126,86 @@ class _BridgePainter extends CustomPainter {
 /// Onboarding-two "bring hands together" stage. Uses the approved
 /// left_hand.png / right_hand.png / center_glow.png assets directly —
 /// nothing here is redrawn or AI-generated.
+///
+/// [progress] drives the hands from their separated resting position
+/// (matches the reference image) toward the center as the user drags.
+/// [handshakeBounce] is an optional -1..1 signal used only for the brief
+/// down/up/down settle once the hands connect (see [OnboardingTwo]).
 class HandsStage extends StatelessWidget {
-  const HandsStage({super.key, required this.progress, required this.ambient});
+  const HandsStage({
+    super.key,
+    required this.progress,
+    required this.ambient,
+    this.handshakeBounce = 0,
+  });
 
   final double progress;
   final double ambient;
+  final double handshakeBounce;
 
   @override
   Widget build(BuildContext context) {
-    final glowOpacity = (progress * 1.15).clamp(0.0, 1.0);
-    final glowScale = .82 + progress * .34;
-    return Stack(
-      fit: StackFit.expand,
-      alignment: Alignment.center,
-      children: [
-        Align(
-          alignment: const Alignment(0, -.16),
-          child: Opacity(
-            opacity: glowOpacity,
-            child: Transform.scale(
-              scale: glowScale,
-              child: Image.asset(
-                'assets/onboarding_two/center_glow.png',
-                width: 320,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
+    final glowOpacity =
+        ((progress * 1.15) + handshakeBounce.abs() * .15).clamp(0.0, 1.0);
+    final glowScale =
+        .82 + progress * .34 + handshakeBounce.abs() * .05;
+    final floatY = math.sin(ambient * math.pi * 2) * 3;
+    final bounceY = handshakeBounce * 7;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final handWidth = math.min(constraints.maxWidth * .44, 182.0);
+        // Distance each hand still has to travel to meet at the center;
+        // shrinks to ~0 as progress approaches 1 so the hands connect
+        // (their faded fingertips overlap) rather than snapping together.
+        final spread = constraints.maxWidth * .26 * (1 - progress);
+
+        return Stack(
+          fit: StackFit.expand,
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: const Alignment(0, -.16),
+              child: Opacity(
+                opacity: glowOpacity,
+                child: Transform.scale(
+                  scale: glowScale,
+                  child: Image.asset(
+                    'assets/onboarding_two/center_glow.png',
+                    width: 320,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+            Align(
+              alignment: const Alignment(0, -.04),
+              child: Transform.translate(
+                offset: Offset(-spread - 4, floatY + bounceY),
+                child: Image.asset(
+                  'assets/onboarding_two/left_hand.png',
+                  width: handWidth,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                ),
+              ),
+            ),
+            Align(
+              alignment: const Alignment(0, -.04),
+              child: Transform.translate(
+                offset: Offset(spread + 4, -floatY + bounceY),
+                child: Image.asset(
+                  'assets/onboarding_two/right_hand.png',
+                  width: handWidth,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

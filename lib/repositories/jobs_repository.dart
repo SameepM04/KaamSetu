@@ -177,16 +177,23 @@ class JobsRepository {
 
   /// Resolves a repository identity without authenticating as a side effect.
   ///
-  /// The existing [WorkerAuthService] intentionally never creates a real
-  /// Firebase Auth user in debug builds (see its class doc), which would
-  /// otherwise leave `FirebaseAuth.instance.currentUser` null and make
-  /// per-user Firestore paths impossible. Anonymous auth is Firebase
-  /// itself, not a new architecture, so this stays inside "reuse
-  /// Firebase" — it just guarantees a `uid` exists for `users/{uid}/...`.
+  /// A real, authenticated Firebase user (Email/Password, or the Fake-OTP
+  /// flow's anonymous sign-in) always wins — this mirrors
+  /// [HouseholdRepository._uid()] and is what Phase 2 of the auth
+  /// migration fixed: this used to check `kUseFakeOtp` FIRST and return
+  /// [LocalWorkerSession.userId] even when a real `FirebaseAuth.currentUser`
+  /// existed, which meant JobsRepository and HouseholdRepository could
+  /// silently disagree about which uid was "current" for the same signed-in
+  /// person. [LocalWorkerSession.userId] (and its `fake-worker-kaamsetu`
+  /// fallback) is now used only as a last resort, when dev/Fake-OTP mode
+  /// hasn't produced a real Firebase user yet.
   String? _uid() {
+    if (_firebaseAvailable) {
+      final firebaseUid = _auth.currentUser?.uid;
+      if (firebaseUid != null) return firebaseUid;
+    }
     if (kUseFakeOtp) return LocalWorkerSession.userId;
-    if (!_firebaseAvailable) return null;
-    return _auth.currentUser?.uid;
+    return null;
   }
 
   /// Whether this repository currently has a usable worker identity. In
@@ -644,6 +651,38 @@ class JobsRepository {
       return 0;
     }
   }
+
+  /// Public read of the same profile-completion gate [applyForJob]
+  /// enforces (0-100), so a caller can choose which pre-submit dialog to
+  /// show — e.g. the profile-incomplete dialog vs. the Phase 2 motivational
+  /// first-application popup — without a second completion calculation.
+  /// [applyForJob] still re-checks this itself before writing, so this
+  /// pre-check is advisory only and can never be the sole gate.
+  Future<int> currentProfileCompletionPercent() async {
+    final uid = _uid();
+    if (uid == null) return 0;
+    final completion = await _currentProfileCompletion(uid);
+    return (completion * 100).round();
+  }
+
+  /// Phase 2 "first application" source of truth. True once the worker has
+  /// at least one real application on [applications] — i.e. one they
+  /// actually submitted via [applyForJob], in any status (including
+  /// withdrawn, since it was still successfully submitted at the time).
+  /// The bundled [kDemoCompletedApplications] are excluded via
+  /// [ApplicationEntry.isSampleDemoEntry], the same exclusion already used
+  /// to keep the dashboard's counters real-application-only — this worker
+  /// never actually applied for those, so they must not hide the
+  /// motivational moment either.
+  bool get hasEverApplied =>
+      applications.value.values.any((entry) => !entry.isSampleDemoEntry);
+
+  /// Whether the motivational first-application popup should be offered
+  /// right now. Requires [applicationsLoaded] so a not-yet-loaded cache is
+  /// never misread as "no applications yet" — callers should treat `false`
+  /// here as "fall back to the normal Apply flow", not as "definitely not
+  /// first", since the true answer just isn't known yet.
+  bool get isFirstApplication => applicationsLoaded.value && !hasEverApplied;
 
   Future<void> removeApplication(String jobId) async {
     final uid = _uid();

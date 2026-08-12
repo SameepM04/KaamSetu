@@ -146,6 +146,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             : premiumPageRoute(const WorkerHomeScreen()),
       );
     } on FirebaseAuthException catch (e) {
+      // Log the real exception rather than only showing the friendly
+      // message — needed to diagnose things like Anonymous Auth being
+      // disabled in the Firebase Console (code `operation-not-allowed` /
+      // `admin-restricted-operation`) instead of guessing.
+      debugPrint('OTP verification failed: ${e.code} — ${e.message}');
       if (!mounted) return;
       setState(() {
         _verifying = false;
@@ -154,7 +159,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             : (e.message ?? 'Verification failed. Please try again.');
       });
       _otpKey.currentState?.clear();
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('OTP verification failed: $e');
+      debugPrint('$st');
       if (!mounted) return;
       setState(() {
         _verifying = false;

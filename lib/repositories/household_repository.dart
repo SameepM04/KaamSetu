@@ -74,6 +74,50 @@ class HouseholdRepository {
     );
   }
 
+  /// Updates the signed-in household's `fullName`/`address` in Firestore
+  /// (`households/{uid}`, merged so photo/avatar fields are untouched).
+  ///
+  /// This is the one write path for household profile edits — reused by
+  /// whatever UI lets the household edit their name/address, exactly like
+  /// [updateProfilePhoto] is the one path for photo edits. Because
+  /// `_uid()` always resolves to the currently authenticated user (real
+  /// Firebase Auth uid, anonymous or not), a household can only ever
+  /// update its own document — there is no way to target another uid.
+  Future<void> updateHouseholdProfile({
+    required String name,
+    required String address,
+  }) async {
+    final trimmedName = name.trim();
+    final trimmedAddress = address.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Name cannot be empty.');
+    }
+    if (trimmedAddress.isEmpty) {
+      throw ArgumentError('Address cannot be empty.');
+    }
+
+    final uid = _uid();
+    if (uid == null) {
+      throw StateError('You need to be signed in to update your profile.');
+    }
+
+    if (_auth.currentUser != null) {
+      await _firestore.collection('households').doc(uid).set({
+        'uid': uid,
+        'fullName': trimmedName,
+        'address': trimmedAddress,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } else {
+      // No authenticated Firebase user (shouldn't happen now that Fake OTP
+      // signs in anonymously, but kept as the same defensive fallback
+      // `updateProfilePhoto` already uses) — persist locally instead of
+      // silently reporting success against a Firestore write that never
+      // happened.
+      LocalWorkerSession.save({'fullName': trimmedName, 'address': trimmedAddress});
+    }
+  }
+
   /// Quick photo-only update for the household profile avatar's pencil
   /// button. Uploads [bytes] to ImageKit (not Firebase Storage — see
   /// `imagekit_service.dart` for why), then persists `profilePhotoURL`
